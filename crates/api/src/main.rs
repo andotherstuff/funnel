@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{header, StatusCode},
     response::IntoResponse,
     routing::get,
     Json, Router,
@@ -54,7 +54,9 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/health", get(health))
-        .route("/metrics", get(move || async move { metrics_handle.render() }))
+        .route("/metrics", get(move || async move {
+            ([(header::CACHE_CONTROL, "no-store")], metrics_handle.render())
+        }))
         .route("/api/videos/{id}/stats", get(get_video_stats))
         .route("/api/videos", get(list_videos))
         .route("/api/users/{pubkey}/videos", get(get_user_videos))
@@ -73,7 +75,10 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn health() -> impl IntoResponse {
-    Json(serde_json::json!({ "status": "ok" }))
+    (
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(serde_json::json!({ "status": "ok" })),
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,16 +97,24 @@ async fn get_video_stats(
         Ok(Some(stats)) => {
             histogram!(api::QUERY_DURATION, "endpoint" => "video_stats")
                 .record(start.elapsed().as_secs_f64());
-            (StatusCode::OK, Json(serde_json::to_value(stats).unwrap())).into_response()
-        }
-        Ok(None) => {
-            (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Video not found" })))
+            (
+                StatusCode::OK,
+                [(header::CACHE_CONTROL, "public, max-age=30")],
+                Json(serde_json::to_value(stats).unwrap()),
+            )
                 .into_response()
         }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            [(header::CACHE_CONTROL, "no-store")],
+            Json(serde_json::json!({ "error": "Video not found" })),
+        )
+            .into_response(),
         Err(e) => {
             tracing::error!(error = %e, "Failed to get video stats");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
+                [(header::CACHE_CONTROL, "no-store")],
                 Json(serde_json::json!({ "error": "Internal server error" })),
             )
                 .into_response()
@@ -156,11 +169,16 @@ async fn list_videos(
         .record(start.elapsed().as_secs_f64());
 
     match result {
-        Ok(videos) => Json(serde_json::to_value(videos).unwrap()).into_response(),
+        Ok(videos) => (
+            [(header::CACHE_CONTROL, "public, max-age=60")],
+            Json(serde_json::to_value(videos).unwrap()),
+        )
+            .into_response(),
         Err(e) => {
             tracing::error!(error = %e, "Failed to list videos");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
+                [(header::CACHE_CONTROL, "no-store")],
                 Json(serde_json::json!({ "error": "Internal server error" })),
             )
                 .into_response()
@@ -196,12 +214,17 @@ async fn get_user_videos(
         Ok(videos) => {
             histogram!(api::QUERY_DURATION, "endpoint" => "user_videos")
                 .record(start.elapsed().as_secs_f64());
-            Json(serde_json::to_value(videos).unwrap()).into_response()
+            (
+                [(header::CACHE_CONTROL, "public, max-age=60")],
+                Json(serde_json::to_value(videos).unwrap()),
+            )
+                .into_response()
         }
         Err(e) => {
             tracing::error!(error = %e, "Failed to get user videos");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
+                [(header::CACHE_CONTROL, "no-store")],
                 Json(serde_json::json!({ "error": "Internal server error" })),
             )
                 .into_response()
@@ -231,12 +254,17 @@ async fn search_videos(
             Ok(videos) => {
                 histogram!(api::QUERY_DURATION, "endpoint" => "search")
                     .record(start.elapsed().as_secs_f64());
-                return Json(serde_json::to_value(videos).unwrap()).into_response();
+                return (
+                    [(header::CACHE_CONTROL, "public, max-age=60")],
+                    Json(serde_json::to_value(videos).unwrap()),
+                )
+                    .into_response();
             }
             Err(e) => {
                 tracing::error!(error = %e, "Failed to search by hashtag");
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
+                    [(header::CACHE_CONTROL, "no-store")],
                     Json(serde_json::json!({ "error": "Internal server error" })),
                 )
                     .into_response();
@@ -250,12 +278,17 @@ async fn search_videos(
             Ok(videos) => {
                 histogram!(api::QUERY_DURATION, "endpoint" => "search")
                     .record(start.elapsed().as_secs_f64());
-                return Json(serde_json::to_value(videos).unwrap()).into_response();
+                return (
+                    [(header::CACHE_CONTROL, "public, max-age=60")],
+                    Json(serde_json::to_value(videos).unwrap()),
+                )
+                    .into_response();
             }
             Err(e) => {
                 tracing::error!(error = %e, query = %q, "Failed to search by text");
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
+                    [(header::CACHE_CONTROL, "no-store")],
                     Json(serde_json::json!({ "error": "Internal server error" })),
                 )
                     .into_response();
@@ -265,6 +298,7 @@ async fn search_videos(
 
     (
         StatusCode::BAD_REQUEST,
+        [(header::CACHE_CONTROL, "no-store")],
         Json(serde_json::json!({ "error": "Search requires 'tag' or 'q' parameter" })),
     )
         .into_response()
@@ -286,8 +320,11 @@ async fn get_stats(State(state): State<AppState>) -> impl IntoResponse {
     histogram!(api::QUERY_DURATION, "endpoint" => "stats")
         .record(start.elapsed().as_secs_f64());
 
-    Json(Stats {
-        total_events: events,
-        total_videos: videos,
-    })
+    (
+        [(header::CACHE_CONTROL, "public, max-age=60")],
+        Json(Stats {
+            total_events: events,
+            total_videos: videos,
+        }),
+    )
 }
