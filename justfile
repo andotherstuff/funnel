@@ -71,3 +71,63 @@ audit:
 # Show outdated dependencies (requires cargo-outdated)
 outdated:
     cargo outdated --workspace
+
+# =============================================================================
+# Docker commands
+# =============================================================================
+
+# Build Docker images
+docker-build:
+    docker compose build
+
+# Start all services
+up:
+    docker compose up -d
+
+# Start with rebuild
+up-build:
+    docker compose up -d --build
+
+# Stop all services
+down:
+    docker compose down
+
+# Stop and remove volumes (WARNING: deletes data)
+down-volumes:
+    docker compose down -v
+
+# View logs (all services)
+logs:
+    docker compose logs -f
+
+# View logs for specific service
+logs-service SERVICE:
+    docker compose logs -f {{SERVICE}}
+
+# Show service status
+ps:
+    docker compose ps
+
+# Restart all services
+restart:
+    docker compose restart
+
+# Restart specific service
+restart-service SERVICE:
+    docker compose restart {{SERVICE}}
+
+# Show container resource usage
+stats:
+    docker stats --no-stream
+
+# Execute command in API container
+exec-api *ARGS:
+    docker compose exec api {{ARGS}}
+
+# Execute command in strfry container
+exec-strfry *ARGS:
+    docker compose exec strfry {{ARGS}}
+
+# Pull latest images
+pull:
+    docker compose pull
