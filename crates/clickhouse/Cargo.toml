@@ -1,0 +1,16 @@
+[package]
+name = "funnel-clickhouse"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ClickHouse client wrapper for Funnel"
+
+[dependencies]
+clickhouse.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+funnel-proto.workspace = true

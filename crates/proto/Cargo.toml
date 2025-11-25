@@ -1,0 +1,13 @@
+[package]
+name = "funnel-proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Nostr protocol types and video event parsing for Funnel"
+
+[dependencies]
+nostr.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+chrono.workspace = true

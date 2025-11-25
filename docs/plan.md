@@ -4,7 +4,7 @@ Revised plan for a high-throughput Nostr relay backend supporting a Vine-style v
 
 ## Context
 
-- **Current state**: Nostrify DB (TypeScript/SQLite) struggling with throughput at scale
+- **Current state**: Nostrify DB (TypeScript/Postgres) struggling with throughput at scale, doesn't have search and complex queries
 - **Write volume**: Several thousand events/sec
 - **Read volume**: 10-100k reads/sec (most complex queries via custom API, not Nostr REQ)
 - **Video events**: Kinds 34235 (normal) and 34236 (short) - addressable/replaceable per [NIP-71 PR](https://github.com/nostr-protocol/nips/pull/2072)
@@ -19,7 +19,7 @@ Revised plan for a high-throughput Nostr relay backend supporting a Vine-style v
 └───────────────┬─────────────────────────────────┬───────────────┘
                 │                                 │
                 │ Nostr protocol                  │ HTTP
-                │ (EVENT/REQ/CLOSE)               │ (stats, search, feed)
+                │ (EVENT/REQ/CLOSE)               │ (stats, search, feeds)
                 │                                 │
                 ▼                                 │
        ┌─────────────────┐                        │
@@ -53,7 +53,7 @@ Revised plan for a high-throughput Nostr relay backend supporting a Vine-style v
        │                   REST API                      │
        │                    (Rust)                       │
        │                                                 │
-       │    • /stats    • /search    • /feed            │
+       │    • /stats    • /search    • /feed             │
        └─────────────────────────────────────────────────┘
 ```
 

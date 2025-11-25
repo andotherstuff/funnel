@@ -1,0 +1,23 @@
+[package]
+name = "funnel-ingestion"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Strfry stream ingestion service for Funnel"
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+metrics.workspace = true
+funnel-proto.workspace = true
+funnel-clickhouse.workspace = true
+funnel-observability.workspace = true
+
+[[bin]]
+name = "funnel-ingestion"
+path = "src/main.rs"

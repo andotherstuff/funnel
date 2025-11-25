@@ -1,0 +1,12 @@
+[package]
+name = "funnel-observability"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Prometheus metrics and tracing setup for Funnel"
+
+[dependencies]
+tracing.workspace = true
+tracing-subscriber.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
