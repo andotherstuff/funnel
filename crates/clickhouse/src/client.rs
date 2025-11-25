@@ -36,11 +36,7 @@ impl ClickHouseClient {
 
     /// Get the server version.
     pub async fn version(&self) -> Result<String, ClickHouseError> {
-        let version: String = self
-            .client
-            .query("SELECT version()")
-            .fetch_one()
-            .await?;
+        let version: String = self.client.query("SELECT version()").fetch_one().await?;
         Ok(version)
     }
 
@@ -63,7 +59,10 @@ impl ClickHouseClient {
     }
 
     /// Get video stats by event ID.
-    pub async fn get_video_stats(&self, event_id: &str) -> Result<Option<VideoStats>, ClickHouseError> {
+    pub async fn get_video_stats(
+        &self,
+        event_id: &str,
+    ) -> Result<Option<VideoStats>, ClickHouseError> {
         let result = self
             .client
             .query("SELECT * FROM video_stats WHERE id = ?")
@@ -92,7 +91,10 @@ impl ClickHouseClient {
     }
 
     /// Get trending videos.
-    pub async fn get_trending_videos(&self, limit: u32) -> Result<Vec<TrendingVideo>, ClickHouseError> {
+    pub async fn get_trending_videos(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<TrendingVideo>, ClickHouseError> {
         let results = self
             .client
             .query("SELECT * FROM trending_videos LIMIT ?")
@@ -110,17 +112,15 @@ impl ClickHouseClient {
         limit: u32,
     ) -> Result<Vec<VideoStats>, ClickHouseError> {
         let query = match kind {
-            Some(k) => {
-                self.client
-                    .query("SELECT * FROM video_stats WHERE kind = ? ORDER BY created_at DESC LIMIT ?")
-                    .bind(k)
-                    .bind(limit)
-            }
-            None => {
-                self.client
-                    .query("SELECT * FROM video_stats ORDER BY created_at DESC LIMIT ?")
-                    .bind(limit)
-            }
+            Some(k) => self
+                .client
+                .query("SELECT * FROM video_stats WHERE kind = ? ORDER BY created_at DESC LIMIT ?")
+                .bind(k)
+                .bind(limit),
+            None => self
+                .client
+                .query("SELECT * FROM video_stats ORDER BY created_at DESC LIMIT ?")
+                .bind(limit),
         };
 
         let results = query.fetch_all().await?;

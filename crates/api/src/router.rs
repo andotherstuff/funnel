@@ -1,13 +1,13 @@
 //! Router configuration for the API.
 
-use axum::{http::header, routing::get, Router};
+use axum::{Router, http::header, routing::get};
 use funnel_clickhouse::{StatsQueries, VideoQueries};
 use metrics_exporter_prometheus::PrometheusHandle;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    get_stats, get_user_videos, get_video_stats, health, list_videos, search_videos, AppState,
+    AppState, get_stats, get_user_videos, get_video_stats, health, list_videos, search_videos,
 };
 
 /// Create the API router with the given storage backend and metrics handle.
@@ -20,7 +20,10 @@ where
         .route(
             "/metrics",
             get(move || async move {
-                ([(header::CACHE_CONTROL, "no-store")], metrics_handle.render())
+                (
+                    [(header::CACHE_CONTROL, "no-store")],
+                    metrics_handle.render(),
+                )
             }),
         )
         .route("/api/videos/{id}/stats", get(get_video_stats::<S>))

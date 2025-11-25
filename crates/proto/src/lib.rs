@@ -291,7 +291,10 @@ mod tests {
 
             assert_eq!(event.get_tag("d"), Some("my-video-id"));
             assert_eq!(event.get_tag("title"), Some("My Cool Video"));
-            assert_eq!(event.get_tag("thumb"), Some("https://example.com/thumb.jpg"));
+            assert_eq!(
+                event.get_tag("thumb"),
+                Some("https://example.com/thumb.jpg")
+            );
             assert_eq!(event.get_tag("url"), Some("https://example.com/video.mp4"));
         }
 
@@ -339,7 +342,10 @@ mod tests {
                 meta.thumbnail,
                 Some("https://example.com/thumb.jpg".to_string())
             );
-            assert_eq!(meta.video_url, Some("https://example.com/video.mp4".to_string()));
+            assert_eq!(
+                meta.video_url,
+                Some("https://example.com/video.mp4".to_string())
+            );
             assert_eq!(meta.hashtags, vec!["nostr", "bitcoin"]);
         }
 

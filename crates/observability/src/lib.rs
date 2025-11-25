@@ -3,7 +3,7 @@
 //! Provides tracing subscriber configuration and Prometheus metrics export.
 
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Initialize tracing with JSON output and env filter.
 pub fn init_tracing() {

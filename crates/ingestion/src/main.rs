@@ -7,7 +7,7 @@ use std::io::{self, BufRead};
 use std::time::{Duration, Instant};
 
 use funnel_clickhouse::ClickHouseClient;
-use funnel_ingestion::{parse_line, BatchConfig, BatchProcessor, FlushReason};
+use funnel_ingestion::{BatchConfig, BatchProcessor, FlushReason, parse_line};
 use funnel_observability::{ingestion, init_tracing_dev};
 use funnel_proto::ParsedEvent;
 use metrics::{counter, gauge, histogram};
@@ -60,25 +60,23 @@ async fn main() -> anyhow::Result<()> {
         for line in stdin.lock().lines() {
             match line {
                 Ok(line) if line.is_empty() => continue,
-                Ok(line) => {
-                    match parse_line(&line) {
-                        Some(event) => {
-                            counter!(ingestion::EVENTS_RECEIVED, "kind" => event.kind.to_string())
-                                .increment(1);
+                Ok(line) => match parse_line(&line) {
+                    Some(event) => {
+                        counter!(ingestion::EVENTS_RECEIVED, "kind" => event.kind.to_string())
+                            .increment(1);
 
-                            if tx.blocking_send(event).is_err() {
-                                tracing::error!("Receiver dropped, shutting down reader");
-                                break;
-                            }
-                        }
-                        None => {
-                            tracing::warn!(
-                                line = %line.chars().take(100).collect::<String>(),
-                                "Failed to parse line"
-                            );
+                        if tx.blocking_send(event).is_err() {
+                            tracing::error!("Receiver dropped, shutting down reader");
+                            break;
                         }
                     }
-                }
+                    None => {
+                        tracing::warn!(
+                            line = %line.chars().take(100).collect::<String>(),
+                            "Failed to parse line"
+                        );
+                    }
+                },
                 Err(e) => {
                     tracing::error!(error = %e, "Error reading stdin");
                     break;

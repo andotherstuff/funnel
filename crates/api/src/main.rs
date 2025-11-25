@@ -4,7 +4,7 @@
 
 use std::env;
 
-use funnel_api::{create_router, AppState};
+use funnel_api::{AppState, create_router};
 use funnel_clickhouse::ClickHouseClient;
 use funnel_observability::init_tracing_dev;
 

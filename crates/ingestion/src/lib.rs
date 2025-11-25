@@ -74,7 +74,8 @@ impl BatchProcessor {
     pub fn should_flush(&self) -> FlushReason {
         if self.batch.len() >= self.config.max_batch_size {
             FlushReason::BatchFull
-        } else if !self.batch.is_empty() && self.last_flush.elapsed() >= self.config.flush_interval {
+        } else if !self.batch.is_empty() && self.last_flush.elapsed() >= self.config.flush_interval
+        {
             FlushReason::TimeoutReached
         } else {
             FlushReason::None

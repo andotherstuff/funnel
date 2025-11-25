@@ -231,10 +231,7 @@ async fn health_returns_ok() {
 #[tokio::test]
 async fn get_video_stats_returns_stats_when_found() {
     let storage = MockStorage::new().with_videos(vec![make_video_stats(
-        "video123",
-        "pubkey1",
-        "My Video",
-        34235,
+        "video123", "pubkey1", "My Video", 34235,
     )]);
     let server = create_test_server(storage);
 
@@ -367,12 +364,8 @@ async fn get_user_videos_returns_videos_for_user() {
 
 #[tokio::test]
 async fn get_user_videos_returns_empty_for_unknown_user() {
-    let storage = MockStorage::new().with_videos(vec![make_video_stats(
-        "video1",
-        "user1",
-        "Video 1",
-        34235,
-    )]);
+    let storage =
+        MockStorage::new().with_videos(vec![make_video_stats("video1", "user1", "Video 1", 34235)]);
     let server = create_test_server(storage);
 
     let response = server.get("/api/users/unknown_user/videos").await;
@@ -514,12 +507,8 @@ async fn health_has_no_store_cache_header() {
 
 #[tokio::test]
 async fn video_stats_has_public_cache_header() {
-    let storage = MockStorage::new().with_videos(vec![make_video_stats(
-        "video1",
-        "pubkey1",
-        "Video",
-        34235,
-    )]);
+    let storage =
+        MockStorage::new().with_videos(vec![make_video_stats("video1", "pubkey1", "Video", 34235)]);
     let server = create_test_server(storage);
 
     let response = server.get("/api/videos/video1/stats").await;

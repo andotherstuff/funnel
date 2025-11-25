@@ -7,10 +7,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use axum::{
-    extract::{Path, Query, State},
-    http::{header, StatusCode},
-    response::IntoResponse,
     Json,
+    extract::{Path, Query, State},
+    http::{StatusCode, header},
+    response::IntoResponse,
 };
 use funnel_clickhouse::{StatsQueries, VideoQueries};
 use funnel_observability::api;
@@ -186,7 +186,11 @@ where
 
     let limit = query.limit.unwrap_or(50).min(100);
 
-    match state.storage.get_videos_by_author(&params.pubkey, limit).await {
+    match state
+        .storage
+        .get_videos_by_author(&params.pubkey, limit)
+        .await
+    {
         Ok(videos) => {
             histogram!(api::QUERY_DURATION, "endpoint" => "user_videos")
                 .record(start.elapsed().as_secs_f64());
