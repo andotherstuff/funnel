@@ -3,7 +3,7 @@ services:
     image: ghcr.io/hoytech/strfry:latest
     volumes:
       - strfry_data:/app/strfry-db
-      - ./strfry.conf:/app/strfry.conf:ro
+      - ./config/strfry.conf:/app/strfry.conf:ro
     ports:
       - "7777:7777"
     restart: unless-stopped
@@ -31,7 +31,7 @@ services:
         strfry --config /app/strfry.conf stream --dir both | /app/funnel-ingestion
     volumes:
       - strfry_data:/app/strfry-db:ro
-      - ./strfry.conf:/app/strfry.conf:ro
+      - ./config/strfry.conf:/app/strfry.conf:ro
     restart: unless-stopped
 
   api:
@@ -52,7 +52,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
