@@ -14,15 +14,26 @@ Funnel is the analytics and search layer for a Vine-style video sharing app buil
 ## Architecture
 
 ```
-Nostr Clients ──┬── Nostr protocol ──▶ strfry (LMDB)
-                │                           │
-                │                           │ stream
-                │                           ▼
-                │                      Ingestion Service
-                │                           │
-                │                           │ batch insert
-                │                           ▼
-                └── HTTP ──────────▶ REST API ◀── ClickHouse
+                        ┌────────────────────┐
+                        │    Nostr Clients   │
+                        └─────────┬──────────┘
+                                  │
+                ┌─────────────────┴─────────────────┐
+                │                                   │
+                │ Nostr protocol                    │ HTTP
+                │ (EVENT/REQ/CLOSE)                 │ (stats, search, feeds)
+                ▼                                   ▼
+        ┌───────────────┐                   ┌───────────────┐
+        │    strfry     │                   │   REST API    │
+        │    (LMDB)     │                   │    (Rust)     │
+        └───────┬───────┘                   └───────┬───────┘
+                │                                   │
+                │ strfry stream                     │ queries
+                ▼                                   ▼
+        ┌───────────────┐                   ┌───────────────┐
+        │   Ingestion   │──── writes ──────▶│  ClickHouse   │
+        │    Service    │                   │               │
+        └───────────────┘                   └───────────────┘
 ```
 
 - **strfry** handles EVENT/REQ/CLOSE, subscriptions, and primary storage
