@@ -1,0 +1,10 @@
+---
+all:
+  hosts:
+    funnel-staging:
+      ansible_host: YOUR_STAGING_IP  # Replace with actual IP
+      ansible_user: root
+      ansible_port: 22
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3

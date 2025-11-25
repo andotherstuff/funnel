@@ -1,0 +1,12 @@
+---
+all:
+  hosts:
+    funnel-prod:
+      ansible_host: YOUR_SERVER_IP  # Replace with actual IP
+      ansible_user: root            # Initial connection as root
+      ansible_port: 22
+
+  vars:
+    # After initial setup, use deploy user
+    # ansible_user: deploy
+    ansible_python_interpreter: /usr/bin/python3

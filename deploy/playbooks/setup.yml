@@ -1,0 +1,32 @@
+---
+# Funnel Server Setup Playbook
+# Run: ansible-playbook playbooks/setup.yml
+
+- name: Setup Funnel server
+  hosts: all
+  become: true
+
+  pre_tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+  roles:
+    - base
+    - users
+    - firewall
+    - docker
+    - caddy
+
+  post_tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: |
+          ✅ Server setup complete!
+
+          Next steps:
+          1. Update inventory to use 'deploy' user instead of root
+          2. SSH as deploy user: ssh deploy@{{ ansible_host }}
+          3. Clone the repo and configure .env
+          4. Run: docker compose up -d

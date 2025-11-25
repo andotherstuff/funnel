@@ -1,0 +1,33 @@
+---
+# Server configuration
+server_hostname: funnel-prod
+server_timezone: UTC
+
+# Deploy user
+deploy_user: deploy
+deploy_group: deploy
+# Add your SSH public keys here
+deploy_ssh_keys:
+  # - "ssh-ed25519 AAAAC3... jeff@machine"
+  # - "ssh-ed25519 AAAAC3... another-team-member"
+
+# Firewall ports
+firewall_allowed_tcp_ports:
+  - 22    # SSH
+  - 80    # HTTP (Caddy)
+  - 443   # HTTPS (Caddy)
+  - 7777  # strfry WebSocket
+
+# Domain configuration
+domain_base: yourdomain.com
+domain_relay: "relay.{{ domain_base }}"
+domain_api: "api.{{ domain_base }}"
+domain_grafana: "grafana.{{ domain_base }}"
+
+# App configuration
+app_repo: https://github.com/your-org/funnel.git
+app_dir: /home/{{ deploy_user }}/funnel
+app_branch: main
+
+# Docker compose project name
+compose_project: funnel

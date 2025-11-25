@@ -1,0 +1,54 @@
+---
+# Funnel Application Deployment Playbook
+# Run: ansible-playbook playbooks/deploy.yml
+# Assumes setup.yml has already been run
+
+- name: Deploy Funnel application
+  hosts: all
+  become: true
+  become_user: "{{ deploy_user }}"
+
+  tasks:
+    - name: Clone/update repository
+      ansible.builtin.git:
+        repo: "{{ app_repo }}"
+        dest: "{{ app_dir }}"
+        version: "{{ app_branch }}"
+        force: false
+      register: git_result
+
+    - name: Check if .env exists
+      ansible.builtin.stat:
+        path: "{{ app_dir }}/.env"
+      register: env_file
+
+    - name: Warn if .env missing
+      ansible.builtin.debug:
+        msg: "⚠️  .env file not found! Copy .env.example and configure it."
+      when: not env_file.stat.exists
+
+    - name: Build Docker images
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        build: always
+        state: present
+      when: env_file.stat.exists
+
+    - name: Start services
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        state: present
+      when: env_file.stat.exists
+
+    - name: Display service status
+      ansible.builtin.command:
+        cmd: docker compose ps
+        chdir: "{{ app_dir }}"
+      register: compose_status
+      changed_when: false
+      when: env_file.stat.exists
+
+    - name: Show status
+      ansible.builtin.debug:
+        var: compose_status.stdout_lines
+      when: env_file.stat.exists

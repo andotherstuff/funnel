@@ -1,0 +1,46 @@
+---
+# Base system configuration
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ server_hostname }}"
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ server_timezone }}"
+
+- name: Install essential packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - git
+      - htop
+      - iotop
+      - ncdu
+      - vim
+      - jq
+      - unzip
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - python3-pip
+      - fail2ban
+    state: present
+
+- name: Enable and start fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: started
+
+- name: Configure sysctl for performance
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    state: present
+    reload: true
+  loop:
+    - { name: 'net.core.somaxconn', value: '65535' }
+    - { name: 'net.ipv4.tcp_max_syn_backlog', value: '65535' }
+    - { name: 'vm.swappiness', value: '10' }
