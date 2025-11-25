@@ -7,8 +7,9 @@ use std::io::{self, BufRead};
 use std::time::{Duration, Instant};
 
 use funnel_clickhouse::ClickHouseClient;
+use funnel_ingestion::{parse_line, BatchConfig, BatchProcessor, FlushReason};
 use funnel_observability::{ingestion, init_tracing_dev};
-use funnel_proto::{ParsedEvent, StrfryMessage};
+use funnel_proto::ParsedEvent;
 use metrics::{counter, gauge, histogram};
 use tokio::sync::mpsc;
 
@@ -60,23 +61,21 @@ async fn main() -> anyhow::Result<()> {
             match line {
                 Ok(line) if line.is_empty() => continue,
                 Ok(line) => {
-                    // Try to parse as strfry message first, then as raw event
-                    let event = if let Ok(msg) = StrfryMessage::from_json(&line) {
-                        Some(msg.to_parsed_event())
-                    } else if let Ok(event) = ParsedEvent::from_json(&line) {
-                        Some(event)
-                    } else {
-                        tracing::warn!(line = %line.chars().take(100).collect::<String>(), "Failed to parse line");
-                        None
-                    };
+                    match parse_line(&line) {
+                        Some(event) => {
+                            counter!(ingestion::EVENTS_RECEIVED, "kind" => event.kind.to_string())
+                                .increment(1);
 
-                    if let Some(event) = event {
-                        counter!(ingestion::EVENTS_RECEIVED, "kind" => event.kind.to_string())
-                            .increment(1);
-
-                        if tx.blocking_send(event).is_err() {
-                            tracing::error!("Receiver dropped, shutting down reader");
-                            break;
+                            if tx.blocking_send(event).is_err() {
+                                tracing::error!("Receiver dropped, shutting down reader");
+                                break;
+                            }
+                        }
+                        None => {
+                            tracing::warn!(
+                                line = %line.chars().take(100).collect::<String>(),
+                                "Failed to parse line"
+                            );
                         }
                     }
                 }
@@ -88,40 +87,43 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Batch writer
-    let mut batch = Vec::with_capacity(batch_size);
-    let mut last_flush = Instant::now();
+    // Batch processor
+    let config = BatchConfig::new(batch_size, flush_interval);
+    let mut processor = BatchProcessor::new(config);
 
     loop {
-        let timeout = tokio::time::timeout(flush_interval, rx.recv()).await;
+        let timeout = tokio::time::timeout(processor.flush_interval(), rx.recv()).await;
 
         match timeout {
             Ok(Some(event)) => {
-                batch.push(event);
+                processor.push(event);
 
-                if batch.len() >= batch_size {
-                    flush_batch(&client, &mut batch).await?;
-                    last_flush = Instant::now();
+                if processor.should_flush() == FlushReason::BatchFull
+                    && let Some(batch) = processor.take_batch()
+                {
+                    flush_batch(&client, batch).await?;
                 }
             }
             Ok(None) => {
-                // Channel closed
+                // Channel closed - flush remaining events
+                let batch = processor.take_batch_force();
                 if !batch.is_empty() {
-                    flush_batch(&client, &mut batch).await?;
+                    flush_batch(&client, batch).await?;
                 }
                 break;
             }
             Err(_) => {
                 // Timeout - flush if we have events and enough time has passed
-                if !batch.is_empty() && last_flush.elapsed() >= flush_interval {
-                    flush_batch(&client, &mut batch).await?;
-                    last_flush = Instant::now();
+                if processor.should_flush() == FlushReason::TimeoutReached
+                    && let Some(batch) = processor.take_batch()
+                {
+                    flush_batch(&client, batch).await?;
                 }
             }
         }
 
         // Update lag metric (time since oldest event in batch)
-        if let Some(oldest) = batch.first() {
+        if let Some(oldest) = processor.oldest_event() {
             let lag = chrono::Utc::now()
                 .signed_duration_since(oldest.created_at)
                 .num_seconds() as f64;
@@ -137,10 +139,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn flush_batch(
-    client: &ClickHouseClient,
-    batch: &mut Vec<ParsedEvent>,
-) -> anyhow::Result<()> {
+async fn flush_batch(client: &ClickHouseClient, batch: Vec<ParsedEvent>) -> anyhow::Result<()> {
     if batch.is_empty() {
         return Ok(());
     }
@@ -166,6 +165,5 @@ async fn flush_batch(
         "Flushed batch"
     );
 
-    batch.clear();
     Ok(())
 }

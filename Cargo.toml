@@ -47,6 +47,14 @@ anyhow = "1.0"
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
+# Testing
+tokio-test = "0.4"
+axum-test = "18"
+mockall = "0.13"
+wiremock = "0.6"
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = ["clickhouse"] }
+
 # Internal crates
 funnel-proto = { path = "crates/proto" }
 funnel-clickhouse = { path = "crates/clickhouse" }
