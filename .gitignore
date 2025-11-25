@@ -1,1 +1,9 @@
 /target
+
+# Environment files with secrets
+.env
+*.env.local
+
+# Local data directories
+strfry-db/
+

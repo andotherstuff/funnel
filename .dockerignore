@@ -1,0 +1,28 @@
+# Build artifacts
+target/
+*.rs.bk
+
+# IDE
+.cursor/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Docker volumes (if mounted locally for dev)
+strfry-db/
+clickhouse-data/
+grafana-data/
+prometheus-data/
+
+# Documentation (not needed in image)
+docs/
+*.md
+LICENSE
+
+# Assets
+assets/

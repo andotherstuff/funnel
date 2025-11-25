@@ -1,0 +1,24 @@
+# Prometheus configuration for Funnel
+# Scrapes metrics from API service and local services
+# ClickHouse Cloud metrics are available in the ClickHouse Cloud console
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Funnel API service
+  - job_name: 'funnel-api'
+    static_configs:
+      - targets: ['api:8080']
+    metrics_path: /metrics
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Add node_exporter if deployed
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['host.docker.internal:9100']

@@ -1,0 +1,79 @@
+services:
+  strfry:
+    image: ghcr.io/hoytech/strfry:latest
+    volumes:
+      - strfry_data:/app/strfry-db
+      - ./strfry.conf:/app/strfry.conf:ro
+    ports:
+      - "7777:7777"
+    restart: unless-stopped
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ingestion
+    depends_on:
+      - strfry
+    environment:
+      # ClickHouse Cloud connection (set in .env or override)
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL:?Set CLICKHOUSE_URL in .env}
+      - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-nostr}
+      - BATCH_SIZE=1000
+      - FLUSH_INTERVAL_MS=100
+      - RUST_LOG=info
+    # Stream from strfry and pipe to ingestion
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for strfry..."
+        sleep 3
+        strfry --config /app/strfry.conf stream --dir both | /app/funnel-ingestion
+    volumes:
+      - strfry_data:/app/strfry-db:ro
+      - ./strfry.conf:/app/strfry.conf:ro
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    environment:
+      # ClickHouse Cloud connection (set in .env or override)
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL:?Set CLICKHOUSE_URL in .env}
+      - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-nostr}
+      - BIND_ADDR=0.0.0.0:8080
+      - RUST_LOG=info
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+
+volumes:
+  strfry_data:
+  prometheus_data:
+  grafana_data:
