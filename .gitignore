@@ -7,3 +7,9 @@
 # Local data directories
 strfry-db/
 
+# Ansible inventory and vars (contain IPs, domains, SSH keys)
+# Copy .example files and fill in your values
+deploy/inventory/production.yml
+deploy/inventory/staging.yml
+deploy/group_vars/all.yml
+

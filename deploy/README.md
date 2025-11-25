@@ -22,7 +22,14 @@ Automated server setup and deployment for Funnel.
    ansible-galaxy install -r requirements.yml
    ```
 
-3. **Configure your inventory**:
+3. **Create config files from examples** (these are gitignored):
+   ```bash
+   cp inventory/production.yml.example inventory/production.yml
+   cp inventory/staging.yml.example inventory/staging.yml
+   cp group_vars/all.yml.example group_vars/all.yml
+   ```
+
+4. **Configure your values**:
    - Edit `inventory/production.yml` with your server IP
    - Edit `group_vars/all.yml` with your SSH keys and domains
 
@@ -80,23 +87,29 @@ ansible-playbook -i inventory/staging.yml playbooks/setup.yml
 
 ```
 deploy/
-├── ansible.cfg              # Ansible configuration
-├── requirements.yml         # Galaxy collections
+├── ansible.cfg                      # Ansible configuration
+├── requirements.yml                 # Galaxy collections
 ├── inventory/
-│   ├── production.yml       # Production servers
-│   └── staging.yml          # Staging servers
+│   ├── production.yml.example       # Template (committed)
+│   ├── production.yml               # Your config (gitignored)
+│   ├── staging.yml.example          # Template (committed)
+│   └── staging.yml                  # Your config (gitignored)
 ├── group_vars/
-│   └── all.yml              # Shared variables
+│   ├── all.yml.example              # Template (committed)
+│   └── all.yml                      # Your config (gitignored)
 ├── playbooks/
-│   ├── setup.yml            # Initial server setup
-│   └── deploy.yml           # Application deployment
+│   ├── setup.yml                    # Initial server setup
+│   └── deploy.yml                   # Application deployment
 └── roles/
-    ├── base/                # Base packages, sysctl
-    ├── users/               # Deploy user, SSH
-    ├── firewall/            # UFW configuration
-    ├── docker/              # Docker CE installation
-    └── caddy/               # Caddy reverse proxy
+    ├── base/                        # Base packages, sysctl
+    ├── users/                       # Deploy user, SSH
+    ├── firewall/                    # UFW configuration
+    ├── docker/                      # Docker CE installation
+    └── caddy/                       # Caddy reverse proxy
 ```
+
+> **Note:** Files with your actual IPs, domains, and SSH keys are gitignored.
+> Only `.example` templates are committed to the repo.
 
 ## Configuration
 

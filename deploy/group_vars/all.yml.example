@@ -8,7 +8,7 @@ deploy_user: deploy
 deploy_group: deploy
 # Add your SSH public keys here
 deploy_ssh_keys:
-  # - "ssh-ed25519 AAAAC3... jeff@machine"
+  - "ssh-ed25519 AAAAC3... your-key-comment"
   # - "ssh-ed25519 AAAAC3... another-team-member"
 
 # Firewall ports

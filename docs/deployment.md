@@ -11,12 +11,12 @@ Complete guide to deploying Funnel on a bare metal server with ClickHouse Cloud.
 │                                                  │
 │   ┌──────────┐      ┌──────────┐                │
 │   │  strfry  │─────▶│ ingestion│────────────┐   │
-│   │  :7777   │      │(internal)│            │   │
-│   └────┬─────┘      └──────────┘            │   │       ┌──────────────┐
-│        │                                    │   │       │  ClickHouse  │
-│   ┌────┴─────┐      ┌──────────┐            ├───┼──────▶│    Cloud     │
-│   │  caddy   │◀─────│   api    │────────────┘   │       │ (GCP us-east)│
-│   │ :80/:443 │      │  :8080   │                │       └──────────────┘
+│   │  :7777   │      │(internal)│            │   │       ┌──────────────┐
+│   └────┬─────┘      └──────────┘            │   │       │  ClickHouse  │
+│        │                                    │   │       │    Cloud     │
+│   ┌────┴─────┐      ┌──────────┐            ├───┼──────▶│ (GCP us-east)│
+│   │  caddy   │◀─────│   api    │────────────┘   │       └──────────────┘
+│   │ :80/:443 │      │  :8080   │                │
 │   └────┬─────┘      └──────────┘                │
 │        │                                        │
 │        │            ┌──────────┐  ┌──────────┐  │
@@ -41,103 +41,103 @@ Public (via Caddy):           Internal only:
 | Network | 1Gbps+ |
 | Provider | OVH Bare Metal (Vint Hill, VA recommended for US East) |
 
-## Step 1: Initial Server Setup
+## Prerequisites
 
-SSH into your new server and run initial setup:
+### Local Machine Setup
 
-```bash
-# Update system
-apt update && apt upgrade -y
-
-# Install essential tools
-apt install -y curl git htop iotop ncdu ufw fail2ban
-
-# Set hostname
-hostnamectl set-hostname funnel-prod
-
-# Configure timezone
-timedatectl set-timezone UTC
-```
-
-### Configure Firewall
+Install Ansible on your local machine:
 
 ```bash
-# Allow SSH
-ufw allow 22/tcp
+# macOS
+brew install ansible
 
-# Allow HTTP/HTTPS (for Caddy)
-ufw allow 80/tcp
-ufw allow 443/tcp
+# Ubuntu/Debian
+sudo apt install ansible
 
-# Allow Nostr WebSocket (strfry)
-ufw allow 7777/tcp
-
-# Enable firewall
-ufw enable
+# pip
+pip install ansible
 ```
 
-### Create Deploy User
+Install required Ansible collections:
 
 ```bash
-# Create user
-useradd -m -s /bin/bash deploy
-usermod -aG sudo deploy
-
-# Set up SSH key auth (copy your public key)
-mkdir -p /home/deploy/.ssh
-# Add your SSH public key to /home/deploy/.ssh/authorized_keys
-chown -R deploy:deploy /home/deploy/.ssh
-chmod 700 /home/deploy/.ssh
-chmod 600 /home/deploy/.ssh/authorized_keys
-
-# Switch to deploy user for remaining steps
-su - deploy
+cd deploy
+ansible-galaxy install -r requirements.yml
 ```
 
-## Step 2: Install Docker
+### Configure Ansible
+
+1. **Set your server IP** in `deploy/inventory/production.yml`:
+
+```yaml
+all:
+  hosts:
+    funnel-prod:
+      ansible_host: 51.xx.xx.xx  # Your server IP
+      ansible_user: root
+```
+
+2. **Add your SSH keys** in `deploy/group_vars/all.yml`:
+
+```yaml
+deploy_ssh_keys:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... you@laptop"
+```
+
+Get your public key with: `cat ~/.ssh/id_ed25519.pub`
+
+3. **Set your domains** in `deploy/group_vars/all.yml`:
+
+```yaml
+domain_base: yourdomain.com
+domain_relay: "relay.{{ domain_base }}"
+domain_api: "api.{{ domain_base }}"
+domain_grafana: "grafana.{{ domain_base }}"
+```
+
+## Step 1: Server Setup with Ansible
+
+Run the setup playbook from your local machine:
 
 ```bash
-# Install Docker
-curl -fsSL https://get.docker.com | sh
+cd deploy
 
-# Add deploy user to docker group
-sudo usermod -aG docker deploy
+# Test connection first
+ansible all -m ping
 
-# Log out and back in, then verify
-docker --version
-docker compose version
+# Run full server setup
+ansible-playbook playbooks/setup.yml
 ```
 
-## Step 3: Clone and Configure Funnel
+This automatically:
+- Updates packages and installs essentials (curl, git, htop, fail2ban, etc.)
+- Creates `deploy` user with sudo access
+- Configures SSH keys and hardens SSH (disables password auth)
+- Sets up UFW firewall (ports 22, 80, 443, 7777)
+- Installs Docker and Docker Compose
+- Installs Caddy and deploys the Caddyfile
 
-```bash
-# Clone repository
-cd ~
-git clone https://github.com/your-org/funnel.git
-cd funnel
+### After Setup
 
-# Create environment file
-cp .env.example .env
+Update your inventory to use the deploy user:
+
+```yaml
+# deploy/inventory/production.yml
+all:
+  hosts:
+    funnel-prod:
+      ansible_host: 51.xx.xx.xx
+      ansible_user: deploy  # Changed from root
 ```
 
-### Configure Environment Variables
+## Step 2: Set Up ClickHouse Cloud
 
-Edit `.env` with your ClickHouse Cloud credentials:
-
-```bash
-# .env
-CLICKHOUSE_URL=https://your-instance.us-east1.gcp.clickhouse.cloud:8443?user=default&password=YOUR_PASSWORD
-CLICKHOUSE_DATABASE=nostr
-```
-
-## Step 4: Set Up ClickHouse Cloud
+ClickHouse Cloud must be configured separately (not managed by Ansible).
 
 ### Create Database and Schema
 
-Connect to ClickHouse Cloud and run the schema:
-
 ```bash
-# Option 1: Using clickhouse-client (if installed locally)
+# Option 1: Using clickhouse-client
 clickhouse-client \
   --host your-instance.us-east1.gcp.clickhouse.cloud \
   --port 8443 \
@@ -164,11 +164,34 @@ clickhouse-client \
 
 Expected tables: `events_local`, `event_tags_flat_data`, plus views.
 
-## Step 5: Build and Start Services
+## Step 3: Deploy Application
+
+SSH into the server and clone the repo:
 
 ```bash
+ssh deploy@YOUR_SERVER_IP
+
+# Clone repository
+git clone https://github.com/your-org/funnel.git ~/funnel
 cd ~/funnel
 
+# Create environment file
+cp .env.example .env
+```
+
+### Configure Environment Variables
+
+Edit `.env` with your ClickHouse Cloud credentials:
+
+```bash
+# .env
+CLICKHOUSE_URL=https://your-instance.us-east1.gcp.clickhouse.cloud:8443?user=default&password=YOUR_PASSWORD
+CLICKHOUSE_DATABASE=nostr
+```
+
+### Build and Start Services
+
+```bash
 # Build Docker images
 docker compose build
 
@@ -198,45 +221,37 @@ curl http://localhost:9090/-/healthy
 curl http://localhost:3000/api/health
 ```
 
-## Step 6: Set Up Reverse Proxy (Caddy)
+## Step 4: Configure DNS
 
-Install Caddy for automatic HTTPS:
+Point your domains to the server IP:
 
-```bash
-# Install Caddy
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update
-sudo apt install caddy
-```
+| Record | Type | Value |
+|--------|------|-------|
+| `relay.yourdomain.com` | A | YOUR_SERVER_IP |
+| `api.yourdomain.com` | A | YOUR_SERVER_IP |
+| `grafana.yourdomain.com` | A | YOUR_SERVER_IP |
 
-### Configure Caddy
+Caddy will automatically obtain Let's Encrypt certificates.
 
-```bash
-sudo tee /etc/caddy/Caddyfile << 'EOF'
-# Nostr relay (WebSocket)
-relay.yourdomain.com {
-    reverse_proxy localhost:7777
-}
+## Step 5: Configure Monitoring
 
-# REST API
-api.yourdomain.com {
-    reverse_proxy localhost:8080
-}
+### Grafana Setup
 
-# Grafana (optional, restrict access)
-grafana.yourdomain.com {
-    reverse_proxy localhost:3000
-    # Add basic auth or IP restriction for production
-}
-EOF
+1. Open `https://grafana.yourdomain.com`
+2. Login with `admin` / `admin` (change immediately!)
+3. Add Prometheus data source: `http://prometheus:9090`
+4. Import dashboards or create custom ones
 
-# Reload Caddy
-sudo systemctl reload caddy
-```
+### Key Metrics to Monitor
 
-## Step 7: Data Migration
+| Metric | Description | Alert Threshold |
+|--------|-------------|-----------------|
+| `ingestion_events_received_total` | Events from strfry | Rate drop |
+| `ingestion_lag_seconds` | Processing delay | > 60s |
+| `api_request_duration_seconds` | API latency | p99 > 500ms |
+| `api_clickhouse_query_duration_seconds` | DB query time | p99 > 200ms |
+
+## Data Migration
 
 ### Import Existing Events from Another Relay
 
@@ -264,24 +279,6 @@ docker compose exec strfry \
   docker compose exec -T ingestion /app/funnel-ingestion
 ```
 
-## Step 8: Configure Monitoring
-
-### Grafana Setup
-
-1. Open `https://grafana.yourdomain.com`
-2. Login with `admin` / `admin` (change immediately!)
-3. Add Prometheus data source: `http://prometheus:9090`
-4. Import dashboards or create custom ones
-
-### Key Metrics to Monitor
-
-| Metric | Description | Alert Threshold |
-|--------|-------------|-----------------|
-| `ingestion_events_received_total` | Events from strfry | Rate drop |
-| `ingestion_lag_seconds` | Processing delay | > 60s |
-| `api_request_duration_seconds` | API latency | p99 > 500ms |
-| `api_clickhouse_query_duration_seconds` | DB query time | p99 > 200ms |
-
 ## Maintenance
 
 ### View Logs
@@ -308,10 +305,19 @@ docker compose restart api
 ### Update Deployment
 
 ```bash
+ssh deploy@YOUR_SERVER_IP
 cd ~/funnel
 git pull
 docker compose build
 docker compose up -d
+```
+
+Or re-run Ansible if server config changed:
+
+```bash
+# From local machine
+cd deploy
+ansible-playbook playbooks/setup.yml
 ```
 
 ### Backup strfry Database
@@ -343,6 +349,19 @@ clickhouse-client \
 
 ## Troubleshooting
 
+### Ansible Connection Issues
+
+```bash
+# Test connection
+ansible all -m ping -vvv
+
+# Make sure SSH key is loaded
+ssh-add ~/.ssh/id_ed25519
+
+# Specify key explicitly
+ansible-playbook playbooks/setup.yml --private-key ~/.ssh/your_key
+```
+
 ### Ingestion Not Receiving Events
 
 ```bash
@@ -371,6 +390,47 @@ docker stats
 
 # strfry LMDB can use lots of RAM for caching - this is normal
 # Reduce if needed by adjusting mapsize in config/strfry.conf
+```
+
+### Firewall Locked You Out
+
+Contact your hosting provider to access console/KVM and fix UFW rules.
+
+## Ansible Reference
+
+### Directory Structure
+
+```
+deploy/
+├── ansible.cfg              # Ansible configuration
+├── requirements.yml         # Galaxy collections
+├── inventory/
+│   ├── production.yml       # Production servers
+│   └── staging.yml          # Staging servers
+├── group_vars/
+│   └── all.yml              # Shared variables (SSH keys, domains)
+├── playbooks/
+│   ├── setup.yml            # Initial server setup
+│   └── deploy.yml           # Application deployment
+└── roles/
+    ├── base/                # Packages, timezone, sysctl
+    ├── users/               # Deploy user, SSH hardening
+    ├── firewall/            # UFW configuration
+    ├── docker/              # Docker CE installation
+    └── caddy/               # Caddy reverse proxy
+```
+
+### Common Commands
+
+```bash
+# Dry run (check what would change)
+ansible-playbook playbooks/setup.yml --check --diff
+
+# Run specific role only
+ansible-playbook playbooks/setup.yml --tags docker
+
+# Use staging inventory
+ansible-playbook -i inventory/staging.yml playbooks/setup.yml
 ```
 
 ---
