@@ -18,9 +18,8 @@ impl ClickHouseClient {
     /// - `http://host:port` (default port 8123)
     /// - `https://host:port?user=default&password=xxx` (with credentials in query params)
     pub fn new(url: &str, database: &str) -> Result<Self, ClickHouseError> {
-        let parsed_url = Url::parse(url).map_err(|e| {
-            ClickHouseError::Config(format!("Invalid ClickHouse URL: {}", e))
-        })?;
+        let parsed_url = Url::parse(url)
+            .map_err(|e| ClickHouseError::Config(format!("Invalid ClickHouse URL: {}", e)))?;
 
         // Extract user and password from query params
         let user = parsed_url
@@ -37,7 +36,13 @@ impl ClickHouseClient {
             "{}://{}:{}",
             parsed_url.scheme(),
             parsed_url.host_str().unwrap_or("localhost"),
-            parsed_url.port().unwrap_or(if parsed_url.scheme() == "https" { 8443 } else { 8123 })
+            parsed_url
+                .port()
+                .unwrap_or(if parsed_url.scheme() == "https" {
+                    8443
+                } else {
+                    8123
+                })
         );
 
         let mut client = Client::default()

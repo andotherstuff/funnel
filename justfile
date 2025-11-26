@@ -131,3 +131,43 @@ exec-strfry *ARGS:
 # Pull latest images
 pull:
     docker compose pull
+
+# =============================================================================
+# Deployment commands (Ansible)
+# =============================================================================
+
+# Deploy to production (with Docker cache)
+deploy:
+    cd deploy && ansible-playbook playbooks/deploy.yml
+
+# Deploy with forced rebuild (no Docker cache)
+deploy-rebuild:
+    cd deploy && ansible-playbook playbooks/deploy.yml -e force_rebuild=true
+
+# Run server setup playbook (first-time setup)
+setup-server:
+    cd deploy && ansible-playbook playbooks/setup.yml
+
+# Deploy ClickHouse schema
+deploy-schema:
+    cd deploy && ansible-playbook playbooks/schema.yml
+
+# Check server status via SSH
+server-status:
+    cd deploy && ansible all -m shell -a "cd ~/funnel && docker compose ps"
+
+# View server logs
+server-logs SERVICE="ingestion":
+    cd deploy && ansible all -m shell -a "cd ~/funnel && docker compose logs {{SERVICE}} --tail 50"
+
+# Restart service on server
+server-restart SERVICE:
+    cd deploy && ansible all -m shell -a "cd ~/funnel && docker compose restart {{SERVICE}}"
+
+# SSH into production server
+ssh:
+    ssh deploy@$(cd deploy && grep -A1 'hosts:' inventory/production.yml | tail -1 | awk '{print $2}' | cut -d= -f2)
+
+# Run ansible ping to test connectivity
+ping:
+    cd deploy && ansible all -m ping

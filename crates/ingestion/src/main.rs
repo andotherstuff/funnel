@@ -28,8 +28,7 @@ const CATCHUP_BUFFER_SECS: i64 = 2 * 24 * 60 * 60; // 2 days
 async fn main() -> anyhow::Result<()> {
     init_tracing_dev();
 
-    let relay_url =
-        env::var("RELAY_URL").unwrap_or_else(|_| "ws://localhost:7777".to_string());
+    let relay_url = env::var("RELAY_URL").unwrap_or_else(|_| "ws://localhost:7777".to_string());
     let clickhouse_url =
         env::var("CLICKHOUSE_URL").unwrap_or_else(|_| "http://localhost:8123".to_string());
     let database = env::var("CLICKHOUSE_DATABASE").unwrap_or_else(|_| "nostr".to_string());
@@ -87,11 +86,11 @@ async fn run_ingestion(
 ) -> anyhow::Result<()> {
     // Get the latest event timestamp for catch-up
     let since_timestamp = client.get_latest_event_timestamp().await?;
-    
+
     // Apply 2-day buffer to catch backdated events (Nostr allows events with past timestamps)
     // ClickHouse's ReplacingMergeTree will deduplicate by event ID
     let since_with_buffer = since_timestamp.map(|ts| ts - CATCHUP_BUFFER_SECS);
-    
+
     if let Some(ts) = since_with_buffer {
         tracing::info!(
             latest_event = since_timestamp.unwrap_or(0),
