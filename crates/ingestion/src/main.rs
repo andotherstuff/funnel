@@ -21,6 +21,9 @@ const DEFAULT_FLUSH_INTERVAL_MS: u64 = 100;
 const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 const SUBSCRIPTION_ID: &str = "funnel-ingestion";
 
+/// Buffer time to account for backdated events (Nostr allows events with past timestamps)
+const CATCHUP_BUFFER_SECS: i64 = 2 * 24 * 60 * 60; // 2 days
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     init_tracing_dev();
@@ -84,9 +87,18 @@ async fn run_ingestion(
 ) -> anyhow::Result<()> {
     // Get the latest event timestamp for catch-up
     let since_timestamp = client.get_latest_event_timestamp().await?;
-
-    if let Some(ts) = since_timestamp {
-        tracing::info!(since = ts, "Catching up from last known event");
+    
+    // Apply 2-day buffer to catch backdated events (Nostr allows events with past timestamps)
+    // ClickHouse's ReplacingMergeTree will deduplicate by event ID
+    let since_with_buffer = since_timestamp.map(|ts| ts - CATCHUP_BUFFER_SECS);
+    
+    if let Some(ts) = since_with_buffer {
+        tracing::info!(
+            latest_event = since_timestamp.unwrap_or(0),
+            since_with_buffer = ts,
+            buffer_days = 2,
+            "Catching up with buffer for backdated events"
+        );
     } else {
         tracing::info!("No existing events, subscribing to all events");
     }
@@ -98,9 +110,8 @@ async fn run_ingestion(
     tracing::info!("Connected to relay");
 
     // Build subscription filter
-    let filter = if let Some(ts) = since_timestamp {
-        // Subscribe to events since last known timestamp
-        // Add 1 second buffer to avoid missing events due to timing
+    let filter = if let Some(ts) = since_with_buffer {
+        // Subscribe to events since (last known - 2 days) to catch backdated events
         serde_json::json!({ "since": ts })
     } else {
         // Subscribe to all events (no filter)
