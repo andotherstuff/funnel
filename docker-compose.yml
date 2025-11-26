@@ -35,6 +35,10 @@ services:
       - BATCH_SIZE=1000
       - FLUSH_INTERVAL_MS=100
       - RUST_LOG=info
+    ulimits:
+      nofile:
+        soft: 1000000
+        hard: 1000000
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
