@@ -3,7 +3,7 @@ name = "funnel-ingestion"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Strfry stream ingestion service for Funnel"
+description = "Nostr relay ingestion service for Funnel"
 
 [lib]
 path = "src/lib.rs"
@@ -24,3 +24,8 @@ metrics.workspace = true
 funnel-proto.workspace = true
 funnel-clickhouse.workspace = true
 funnel-observability.workspace = true
+
+# Websocket client
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+futures-util = "0.3"
+url = "2"

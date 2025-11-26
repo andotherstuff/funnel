@@ -3,7 +3,7 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Stage 1: Build Rust binaries (Alpine/musl for compatibility with strfry)
+# Stage 1: Build Rust binaries
 # -----------------------------------------------------------------------------
 FROM rust:1.90-alpine AS builder
 
@@ -45,29 +45,16 @@ RUN touch crates/*/src/*.rs
 RUN cargo build --release --bin funnel-ingestion --bin funnel-api
 
 # -----------------------------------------------------------------------------
-# Stage 2: Ingestion runtime (Alpine 3.18 to match strfry)
+# Stage 2: Ingestion runtime (minimal - just the binary)
 # -----------------------------------------------------------------------------
 FROM alpine:3.18 AS ingestion
 
-RUN apk add --no-cache \
-    ca-certificates \
-    curl
-
-# Copy strfry binary and ALL its required libraries from strfry image
-COPY --from=ghcr.io/hoytech/strfry:latest /app/strfry /usr/local/bin/strfry
-COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/liblmdb.so.0 /usr/lib/
-COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libcrypto.so.50 /usr/lib/
-COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libssl.so.53 /usr/lib/
-COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libsecp256k1.so.2 /usr/lib/
-COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libzstd.so.1 /usr/lib/
-COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libstdc++.so.6 /usr/lib/
-COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libgcc_s.so.1 /usr/lib/
+RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 
 COPY --from=builder /app/target/release/funnel-ingestion /app/funnel-ingestion
 
-# Default command (overridden in docker-compose)
 CMD ["/app/funnel-ingestion"]
 
 # -----------------------------------------------------------------------------
@@ -75,8 +62,7 @@ CMD ["/app/funnel-ingestion"]
 # -----------------------------------------------------------------------------
 FROM alpine:3.18 AS api
 
-RUN apk add --no-cache \
-    ca-certificates
+RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 

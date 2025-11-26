@@ -260,4 +260,19 @@ impl ClickHouseClient {
         self.client.query(ddl).execute().await?;
         Ok(())
     }
+
+    /// Get the latest event timestamp for catch-up sync.
+    ///
+    /// Returns the maximum `created_at` timestamp from the events table,
+    /// or None if the table is empty.
+    pub async fn get_latest_event_timestamp(&self) -> Result<Option<i64>, ClickHouseError> {
+        let result: Option<i64> = self
+            .client
+            .query("SELECT max(created_at) FROM events_local")
+            .fetch_optional()
+            .await?;
+
+        // max() returns 0 for empty table, treat as None
+        Ok(result.filter(|&ts| ts > 0))
+    }
 }
