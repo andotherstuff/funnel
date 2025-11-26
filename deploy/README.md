@@ -57,6 +57,16 @@ This will:
 - Install Docker and Docker Compose
 - Install and configure Caddy
 
+### Setup ClickHouse Schema
+
+Run once to create tables and views (idempotent - safe to re-run):
+
+```bash
+ansible-playbook playbooks/schema.yml
+```
+
+This reads `CLICKHOUSE_URL` from the `.env` file on the server.
+
 ### Deploy Application
 
 After initial setup, deploy the app:

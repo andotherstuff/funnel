@@ -11,13 +11,28 @@
     - ../group_vars/all.yml
 
   tasks:
-    - name: Clone/update repository
+    - name: Check if app directory exists
+      ansible.builtin.stat:
+        path: "{{ app_dir }}"
+      register: app_dir_stat
+
+    - name: Clone repository (if not already present)
       ansible.builtin.git:
         repo: "{{ app_repo }}"
         dest: "{{ app_dir }}"
         version: "{{ app_branch }}"
         force: false
       register: git_result
+      when: not app_dir_stat.stat.exists
+
+    - name: Pull latest changes (if repo exists)
+      ansible.builtin.command:
+        cmd: git pull --ff-only
+        chdir: "{{ app_dir }}"
+      register: git_pull
+      changed_when: "'Already up to date' not in git_pull.stdout"
+      failed_when: false
+      when: app_dir_stat.stat.exists
 
     - name: Check if .env exists
       ansible.builtin.stat:

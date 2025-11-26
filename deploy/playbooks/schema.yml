@@ -1,0 +1,88 @@
+---
+# ClickHouse Schema Setup Playbook
+# Run: ansible-playbook playbooks/schema.yml
+#
+# This is IDEMPOTENT - safe to run multiple times.
+# All statements use CREATE TABLE/VIEW IF NOT EXISTS.
+#
+# For future migrations, consider:
+# - Numbered migration files (001_initial.sql, 002_add_index.sql, etc.)
+# - A migrations table to track what's been applied
+# - Tools like golang-migrate or flyway
+
+- name: Setup ClickHouse schema
+  hosts: all
+  become: true
+  become_user: "{{ deploy_user }}"
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Check if .env exists
+      ansible.builtin.stat:
+        path: "{{ app_dir }}/.env"
+      register: env_file
+
+    - name: Fail if .env missing
+      ansible.builtin.fail:
+        msg: ".env file not found at {{ app_dir }}/.env - create it first with CLICKHOUSE_URL"
+      when: not env_file.stat.exists
+
+    - name: Read CLICKHOUSE_URL from .env
+      ansible.builtin.shell:
+        cmd: grep '^CLICKHOUSE_URL=' {{ app_dir }}/.env | cut -d'=' -f2-
+      register: clickhouse_url_from_env
+      changed_when: false
+      when: clickhouse_url == ""
+
+    - name: Set ClickHouse URL
+      ansible.builtin.set_fact:
+        ch_url: "{{ clickhouse_url if clickhouse_url != '' else clickhouse_url_from_env.stdout }}"
+
+    - name: Validate ClickHouse URL is set
+      ansible.builtin.fail:
+        msg: "CLICKHOUSE_URL not found in .env or group_vars"
+      when: ch_url == ""
+
+    - name: Check if schema.sql exists
+      ansible.builtin.stat:
+        path: "{{ app_dir }}/docs/schema.sql"
+      register: schema_file
+
+    - name: Fail if schema.sql missing
+      ansible.builtin.fail:
+        msg: "schema.sql not found at {{ app_dir }}/docs/schema.sql"
+      when: not schema_file.stat.exists
+
+    - name: Apply ClickHouse schema
+      ansible.builtin.shell:
+        cmd: |
+          curl -s -X POST '{{ ch_url }}' --data-binary @{{ app_dir }}/docs/schema.sql
+      register: schema_result
+      changed_when: true
+
+    - name: Display schema result
+      ansible.builtin.debug:
+        msg: |
+          Schema applied successfully!
+
+          Tables created (if not existing):
+          - events_local
+          - event_tags_flat_data
+
+          Views created (if not existing):
+          - videos, video_stats, trending_videos
+          - reaction_counts, comment_counts, repost_counts
+          - daily/weekly/monthly_active_users
+          - And more...
+
+    - name: Verify tables exist
+      ansible.builtin.shell:
+        cmd: |
+          curl -s '{{ ch_url }}' --data "SELECT name FROM system.tables WHERE database = 'nostr' FORMAT TabSeparated"
+      register: tables_result
+      changed_when: false
+
+    - name: Show existing tables
+      ansible.builtin.debug:
+        var: tables_result.stdout_lines
