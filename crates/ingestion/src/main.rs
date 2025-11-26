@@ -150,6 +150,15 @@ async fn run_ingestion(
             Ok(Some(Ok(Message::Ping(data)))) => {
                 write.send(Message::Pong(data)).await?;
             }
+            Ok(Some(Ok(Message::Pong(_)))) => {
+                // Ignore pong messages
+            }
+            Ok(Some(Ok(Message::Binary(_)))) => {
+                // Nostr doesn't use binary messages, ignore
+            }
+            Ok(Some(Ok(Message::Frame(_)))) => {
+                // Raw frames, ignore
+            }
             Ok(Some(Ok(Message::Close(_)))) => {
                 tracing::warn!("Relay closed connection");
                 // Flush remaining events before returning
