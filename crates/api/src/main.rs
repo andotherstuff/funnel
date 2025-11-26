@@ -5,21 +5,19 @@
 use std::env;
 
 use funnel_api::{AppState, create_router};
-use funnel_clickhouse::ClickHouseClient;
+use funnel_clickhouse::{ClickHouseClient, ClickHouseConfig};
 use funnel_observability::init_tracing_dev;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     init_tracing_dev();
 
-    let clickhouse_url =
-        env::var("CLICKHOUSE_URL").unwrap_or_else(|_| "http://localhost:8123".to_string());
-    let database = env::var("CLICKHOUSE_DATABASE").unwrap_or_else(|_| "nostr".to_string());
+    let ch_config = ClickHouseConfig::from_env()?;
     let bind_addr = env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
     tracing::info!(
-        clickhouse_url = %clickhouse_url,
-        database = %database,
+        clickhouse_url = %ch_config.safe_url(),
+        database = %ch_config.database,
         bind_addr = %bind_addr,
         "Starting API server"
     );
@@ -28,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
     let metrics_handle = funnel_observability::init_metrics();
 
     // Connect to ClickHouse
-    let clickhouse = ClickHouseClient::new(&clickhouse_url, &database)?;
+    let clickhouse = ClickHouseClient::from_config(&ch_config)?;
     clickhouse.ping().await?;
 
     let version = clickhouse.version().await?;

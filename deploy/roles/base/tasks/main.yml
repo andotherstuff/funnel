@@ -25,6 +25,7 @@
       - lsb-release
       - python3-pip
       - fail2ban
+      - tmux
     state: present
 
 - name: Enable and start fail2ban

@@ -33,14 +33,34 @@
       changed_when: false
       when: clickhouse_url == ""
 
-    - name: Set ClickHouse URL
+    - name: Read CLICKHOUSE_USER from .env
+      ansible.builtin.shell:
+        cmd: grep '^CLICKHOUSE_USER=' {{ app_dir }}/.env | cut -d'=' -f2-
+      register: clickhouse_user_from_env
+      changed_when: false
+      when: clickhouse_user == ""
+
+    - name: Read CLICKHOUSE_PASSWORD from .env
+      ansible.builtin.shell:
+        cmd: grep '^CLICKHOUSE_PASSWORD=' {{ app_dir }}/.env | cut -d'=' -f2-
+      register: clickhouse_password_from_env
+      changed_when: false
+      when: clickhouse_password == ""
+
+    - name: Set ClickHouse connection vars
       ansible.builtin.set_fact:
-        ch_url: "{{ clickhouse_url if clickhouse_url != '' else clickhouse_url_from_env.stdout }}"
+        ch_base_url: "{{ clickhouse_url if clickhouse_url != '' else clickhouse_url_from_env.stdout }}"
+        ch_user: "{{ clickhouse_user if clickhouse_user != '' else (clickhouse_user_from_env.stdout | default('default')) }}"
+        ch_password: "{{ clickhouse_password if clickhouse_password != '' else clickhouse_password_from_env.stdout }}"
+
+    - name: Build ClickHouse URL with credentials
+      ansible.builtin.set_fact:
+        ch_url: "{{ ch_base_url }}?user={{ ch_user }}&password={{ ch_password }}"
 
     - name: Validate ClickHouse URL is set
       ansible.builtin.fail:
         msg: "CLICKHOUSE_URL not found in .env or group_vars"
-      when: ch_url == ""
+      when: ch_base_url == ""
 
     - name: Check if schema.sql exists
       ansible.builtin.stat:

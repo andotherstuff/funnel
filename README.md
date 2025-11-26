@@ -1,8 +1,8 @@
 # Funnel
 
-A high-throughput Nostr relay backend for video sharing apps.
+A high-throughput Nostr relay backend for video sharing apps, built with Rust and ClickHouse.
 
-## What is this?
+## Overview
 
 Funnel is the analytics and search layer for a Vine-style video sharing app built on Nostr. It sits alongside [strfry](https://github.com/hoytech/strfry) (which handles the core Nostr protocol) and provides:
 
@@ -28,7 +28,7 @@ Funnel is the analytics and search layer for a Vine-style video sharing app buil
         │    (LMDB)     │                   │    (Rust)     │
         └───────┬───────┘                   └───────┬───────┘
                 │                                   │
-                │ strfry stream                     │ queries
+                │ WebSocket                         │ queries
                 ▼                                   ▼
         ┌───────────────┐                   ┌───────────────┐
         │   Ingestion   │──── writes ──────▶│  ClickHouse   │
@@ -36,31 +36,171 @@ Funnel is the analytics and search layer for a Vine-style video sharing app buil
         └───────────────┘                   └───────────────┘
 ```
 
-- **strfry** handles EVENT/REQ/CLOSE, subscriptions, and primary storage
-- **ClickHouse** stores events for complex queries and aggregations
-- **REST API** exposes stats, search, and feeds to the app
+**strfry** handles EVENT/REQ/CLOSE, subscriptions, and primary storage (LMDB).
+
+**Ingestion** subscribes to strfry via WebSocket and streams all events to ClickHouse with batched inserts.
+
+**ClickHouse** stores events for complex queries, aggregations, and analytics that Nostr REQ doesn't support.
+
+**REST API** exposes video stats, search, and feeds to the app.
 
 ## Why not just use strfry?
 
 strfry is great for standard Nostr queries, but we need:
 
-1. Aggregations (count reactions, comments) that Nostr REQ doesn't support
-2. Custom sort orders (trending, popular) beyond `created_at`
-3. Full-text search across content and hashtags
-4. Data exports for recommendation systems
+1. **Aggregations** — count reactions, comments, reposts (Nostr REQ doesn't support)
+2. **Custom sort orders** — trending, popular (beyond `created_at`)
+3. **Full-text search** — across titles and content
+4. **Analytics** — DAU/WAU/MAU, creator stats, hashtag trends
+5. **Data exports** — for recommendation systems
 
 ClickHouse excels at these analytical queries while strfry handles the real-time Nostr protocol.
 
-## Status
+## API Endpoints
 
-🚧 **Under development** — see [`docs/plan.md`](docs/plan.md) for the implementation roadmap.
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Health check |
+| `GET /metrics` | Prometheus metrics |
+| `GET /api/videos/{id}/stats` | Get reaction, comment, and repost counts for a video |
+| `GET /api/videos?sort=recent\|trending&limit=` | List videos with custom sort |
+| `GET /api/users/{pubkey}/videos?limit=` | Get videos by a specific creator |
+| `GET /api/search?tag=...&q=...&limit=` | Search by hashtag or text |
+| `GET /api/stats` | Total event and video counts |
+
+All endpoints return JSON with `Cache-Control` headers.
+
+## Quick Start
+
+### Prerequisites
+
+- Docker and Docker Compose
+- ClickHouse instance (self-hosted or [ClickHouse Cloud](https://clickhouse.cloud))
+
+### 1. Set up ClickHouse
+
+Apply the schema to your ClickHouse instance:
+
+```bash
+clickhouse-client --multiquery < docs/schema.sql
+```
+
+Or for ClickHouse Cloud:
+
+```bash
+clickhouse-client \
+  --host your-host.clickhouse.cloud \
+  --secure \
+  --user default \
+  --password your-password \
+  --multiquery < docs/schema.sql
+```
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+# Edit .env with your ClickHouse URL:
+# CLICKHOUSE_URL=https://host:8443?user=default&password=xxx
+```
+
+### 3. Start services
+
+```bash
+docker compose up -d
+```
+
+This starts:
+- **strfry** on port 7777 (Nostr relay)
+- **API** on port 8080 (REST endpoints)
+- **Prometheus** on port 9090 (metrics)
+- **Grafana** on port 3000 (dashboards)
+
+### 4. Import existing events (optional)
+
+```bash
+# Export from another relay or database as JSONL
+cat events.jsonl | docker exec -i funnel-strfry-1 strfry import
+```
+
+The ingestion service will automatically catch up on events it missed while stopped.
+
+## Development
+
+### Build
+
+```bash
+cargo build --release
+```
+
+### Run tests
+
+```bash
+cargo test
+```
+
+### Run locally
+
+```bash
+# Start dependencies
+docker compose up -d strfry prometheus
+
+# Run ingestion service
+RELAY_URL=ws://localhost:7777 \
+CLICKHOUSE_URL=http://localhost:8123 \
+cargo run --bin funnel-ingestion
+
+# Run API server
+CLICKHOUSE_URL=http://localhost:8123 \
+cargo run --bin funnel-api
+```
+
+### Useful commands (via justfile)
+
+```bash
+just build       # Build all crates
+just test        # Run tests
+just fmt         # Format code
+just lint        # Run clippy
+just docker-up   # Start all services
+just docker-down # Stop all services
+```
+
+## Project Structure
+
+```
+crates/
+├── proto/        # Nostr types, video event parsing
+├── clickhouse/   # ClickHouse client and queries
+├── ingestion/    # WebSocket subscriber, batch processor
+├── api/          # Axum REST API
+└── observability/# Tracing and metrics
+
+docs/
+├── plan.md       # Implementation roadmap
+├── schema.sql    # ClickHouse schema
+└── deployment.md # Production deployment guide
+
+config/
+├── strfry.conf   # strfry configuration
+└── prometheus.yml# Prometheus scrape config
+```
+
+## Video Events
+
+Funnel indexes video events per [NIP-71](https://github.com/nostr-protocol/nips/blob/master/71.md):
+
+- **Kind 34235** — Normal videos
+- **Kind 34236** — Short videos (vertical format)
+
+Both are addressable/replaceable events identified by the `d` tag.
 
 ## Documentation
 
 - [`docs/plan.md`](docs/plan.md) — Implementation plan and architecture
-- [`docs/schema.sql`](docs/schema.sql) — ClickHouse schema
+- [`docs/schema.sql`](docs/schema.sql) — ClickHouse schema with all tables and views
+- [`docs/deployment.md`](docs/deployment.md) — Production deployment with Ansible
 
 ## License
 
 [MIT](LICENSE)
-

@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
-use funnel_clickhouse::ClickHouseClient;
+use funnel_clickhouse::{ClickHouseClient, ClickHouseConfig};
 use funnel_ingestion::{BatchConfig, BatchProcessor, FlushReason};
 use funnel_observability::{ingestion, init_tracing_dev};
 use funnel_proto::ParsedEvent;
@@ -29,9 +29,7 @@ async fn main() -> anyhow::Result<()> {
     init_tracing_dev();
 
     let relay_url = env::var("RELAY_URL").unwrap_or_else(|_| "ws://localhost:7777".to_string());
-    let clickhouse_url =
-        env::var("CLICKHOUSE_URL").unwrap_or_else(|_| "http://localhost:8123".to_string());
-    let database = env::var("CLICKHOUSE_DATABASE").unwrap_or_else(|_| "nostr".to_string());
+    let ch_config = ClickHouseConfig::from_env()?;
     let batch_size: usize = env::var("BATCH_SIZE")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -45,8 +43,8 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!(
         relay_url = %relay_url,
-        clickhouse_url = %clickhouse_url,
-        database = %database,
+        clickhouse_url = %ch_config.safe_url(),
+        database = %ch_config.database,
         batch_size = batch_size,
         flush_interval_ms = ?flush_interval.as_millis(),
         "Starting ingestion service"
@@ -56,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
     let _metrics = funnel_observability::init_metrics();
 
     // Connect to ClickHouse
-    let client = ClickHouseClient::new(&clickhouse_url, &database)?;
+    let client = ClickHouseClient::from_config(&ch_config)?;
     client.ping().await?;
     let version = client.version().await?;
     tracing::info!(version = %version, "Connected to ClickHouse");

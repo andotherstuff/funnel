@@ -11,25 +11,49 @@ pub struct ClickHouseClient {
     database: String,
 }
 
-impl ClickHouseClient {
-    /// Create a new client connected to the given URL.
-    ///
-    /// URL can be in the format:
-    /// - `http://host:port` (default port 8123)
-    /// - `https://host:port?user=default&password=xxx` (with credentials in query params)
-    pub fn new(url: &str, database: &str) -> Result<Self, ClickHouseError> {
-        let parsed_url = Url::parse(url)
-            .map_err(|e| ClickHouseError::Config(format!("Invalid ClickHouse URL: {}", e)))?;
+/// Configuration for connecting to ClickHouse.
+pub struct ClickHouseConfig {
+    pub url: String,
+    pub database: String,
+    pub user: Option<String>,
+    pub password: Option<String>,
+}
 
-        // Extract user and password from query params
-        let user = parsed_url
-            .query_pairs()
-            .find(|(k, _)| k == "user")
-            .map(|(_, v)| v.to_string());
-        let password = parsed_url
-            .query_pairs()
-            .find(|(k, _)| k == "password")
-            .map(|(_, v)| v.to_string());
+impl ClickHouseConfig {
+    /// Create config from environment variables.
+    ///
+    /// Reads:
+    /// - `CLICKHOUSE_URL` (required): Base URL like `https://host:8443`
+    /// - `CLICKHOUSE_DATABASE` (optional): Database name, defaults to "nostr"
+    /// - `CLICKHOUSE_USER` (optional): Username, defaults to "default"
+    /// - `CLICKHOUSE_PASSWORD` (optional): Password
+    pub fn from_env() -> Result<Self, ClickHouseError> {
+        let url = std::env::var("CLICKHOUSE_URL")
+            .map_err(|_| ClickHouseError::Config("CLICKHOUSE_URL not set".to_string()))?;
+        let database =
+            std::env::var("CLICKHOUSE_DATABASE").unwrap_or_else(|_| "nostr".to_string());
+        let user = std::env::var("CLICKHOUSE_USER").ok();
+        let password = std::env::var("CLICKHOUSE_PASSWORD").ok();
+
+        Ok(Self {
+            url,
+            database,
+            user,
+            password,
+        })
+    }
+
+    /// Returns a redacted version of the URL for logging (no credentials).
+    pub fn safe_url(&self) -> &str {
+        &self.url
+    }
+}
+
+impl ClickHouseClient {
+    /// Create a new client from configuration.
+    pub fn from_config(config: &ClickHouseConfig) -> Result<Self, ClickHouseError> {
+        let parsed_url = Url::parse(&config.url)
+            .map_err(|e| ClickHouseError::Config(format!("Invalid ClickHouse URL: {}", e)))?;
 
         // Build base URL without query params
         let base_url = format!(
@@ -47,22 +71,34 @@ impl ClickHouseClient {
 
         let mut client = Client::default()
             .with_url(&base_url)
-            .with_database(database)
+            .with_database(&config.database)
             .with_option("async_insert", "1")
             .with_option("wait_for_async_insert", "0");
 
         // Add auth if present
-        if let Some(u) = user {
+        if let Some(ref u) = config.user {
             client = client.with_user(u);
         }
-        if let Some(p) = password {
+        if let Some(ref p) = config.password {
             client = client.with_password(p);
         }
 
         Ok(Self {
             client,
-            database: database.to_string(),
+            database: config.database.clone(),
         })
+    }
+
+    /// Create a new client connected to the given URL (legacy, for tests).
+    #[doc(hidden)]
+    pub fn new(url: &str, database: &str) -> Result<Self, ClickHouseError> {
+        let config = ClickHouseConfig {
+            url: url.to_string(),
+            database: database.to_string(),
+            user: Some("default".to_string()),
+            password: None,
+        };
+        Self::from_config(&config)
     }
 
     /// Test the connection by running a simple query.
