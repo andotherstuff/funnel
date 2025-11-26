@@ -3,17 +3,18 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Stage 1: Build Rust binaries
+# Stage 1: Build Rust binaries (Alpine/musl for compatibility with strfry)
 # -----------------------------------------------------------------------------
-FROM rust:1.90-bookworm AS builder
+FROM rust:1.83-alpine AS builder
 
 WORKDIR /app
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+    musl-dev \
+    pkgconf \
+    openssl-dev \
+    openssl-libs-static
 
 # Copy manifests first for dependency caching
 COPY Cargo.toml Cargo.lock ./
@@ -44,23 +45,16 @@ RUN touch crates/*/src/*.rs
 RUN cargo build --release --bin funnel-ingestion --bin funnel-api
 
 # -----------------------------------------------------------------------------
-# Stage 2: Ingestion runtime
+# Stage 2: Ingestion runtime (Alpine 3.18 to match strfry)
 # -----------------------------------------------------------------------------
-FROM debian:bookworm-slim AS ingestion
+FROM alpine:3.18 AS ingestion
 
-RUN apt-get update && apt-get install -y \
+RUN apk add --no-cache \
     ca-certificates \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+    curl
 
-# Copy strfry binary and ALL its Alpine dependencies
+# Copy strfry binary (now works natively - same Alpine base)
 COPY --from=ghcr.io/hoytech/strfry:latest /app/strfry /usr/local/bin/strfry
-COPY --from=ghcr.io/hoytech/strfry:latest /lib/ld-musl-x86_64.so.1 /lib/
-COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/liblmdb.so.0 /usr/lib/
-COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libcrypto.so.50 /usr/lib/
-COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libssl.so.53 /usr/lib/
-COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libsecp256k1.so.2 /usr/lib/
-COPY --from=ghcr.io/hoytech/strfry:latest /lib/libc.musl-x86_64.so.1 /lib/
 
 WORKDIR /app
 
@@ -72,11 +66,10 @@ CMD ["/app/funnel-ingestion"]
 # -----------------------------------------------------------------------------
 # Stage 3: API runtime
 # -----------------------------------------------------------------------------
-FROM debian:bookworm-slim AS api
+FROM alpine:3.18 AS api
 
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+    ca-certificates
 
 WORKDIR /app
 
