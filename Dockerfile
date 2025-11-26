@@ -5,7 +5,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Build Rust binaries (Alpine/musl for compatibility with strfry)
 # -----------------------------------------------------------------------------
-FROM rust:1.83-alpine AS builder
+FROM rust:1.90-alpine AS builder
 
 WORKDIR /app
 
