@@ -13,6 +13,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "aes"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
+dependencies = [
+ "cfg-if",
+ "cipher",
+ "cpufeatures",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -822,6 +833,7 @@ dependencies = [
  "funnel-proto",
  "metrics",
  "nostr-sdk",
+ "rustls",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
@@ -1580,6 +1592,7 @@ version = "0.44.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3595fecf0e0aaacb69a0dc0101a4453f3c76eda333d6bbc49f68f64390b3d85"
 dependencies = [
+ "aes",
  "base64",
  "bech32",
  "bip39",
@@ -2120,6 +2133,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "533f54bc6a7d4f647e46ad909549eda97bf5afc1585190ef692b4286b198bd8f"
 dependencies = [
  "aws-lc-rs",
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",

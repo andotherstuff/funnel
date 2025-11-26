@@ -22,6 +22,11 @@ const CATCHUP_BUFFER_SECS: u64 = 2 * 24 * 60 * 60; // 2 days
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Install rustls crypto provider (required before any TLS operations)
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     init_tracing_dev();
 
     let relay_url = env::var("RELAY_URL").unwrap_or_else(|_| "ws://localhost:7777".to_string());

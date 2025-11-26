@@ -26,4 +26,7 @@ funnel-clickhouse.workspace = true
 funnel-observability.workspace = true
 
 # Nostr SDK for relay connections
-nostr-sdk = "0.44"
+nostr-sdk = { version = "0.44", default-features = false, features = ["all-nips"] }
+
+# TLS crypto backend (required for rustls)
+rustls = { version = "0.23", features = ["ring"] }
