@@ -9,7 +9,7 @@
 -- ==================================
 -- ClickHouse Cloud uses SharedMergeTree which doesn't support ALTER TABLE ADD PROJECTION.
 -- The projection statements below are skipped when deploying to ClickHouse Cloud.
--- 
+--
 -- If you're using self-hosted ClickHouse, you can add projections manually for better
 -- query performance. Projections create alternate sort orders for faster queries.
 --

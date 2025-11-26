@@ -40,7 +40,7 @@ services:
       - |
         echo "Waiting for strfry..."
         sleep 3
-        strfry --config /app/strfry.conf stream --dir both | /app/funnel-ingestion
+        /usr/local/bin/strfry --config /app/strfry.conf stream --dir both | /app/funnel-ingestion
     volumes:
       - strfry_data:/app/strfry-db:ro
       - ./config/strfry.conf:/app/strfry.conf:ro
