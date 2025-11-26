@@ -53,8 +53,15 @@ RUN apk add --no-cache \
     ca-certificates \
     curl
 
-# Copy strfry binary (now works natively - same Alpine base)
+# Copy strfry binary and ALL its required libraries from strfry image
 COPY --from=ghcr.io/hoytech/strfry:latest /app/strfry /usr/local/bin/strfry
+COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/liblmdb.so.0 /usr/lib/
+COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libcrypto.so.50 /usr/lib/
+COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libssl.so.53 /usr/lib/
+COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libsecp256k1.so.2 /usr/lib/
+COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libzstd.so.1 /usr/lib/
+COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libstdc++.so.6 /usr/lib/
+COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libgcc_s.so.1 /usr/lib/
 
 WORKDIR /app
 
