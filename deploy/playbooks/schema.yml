@@ -115,6 +115,11 @@
                   if stmt.upper().startswith('USE ') or 'CREATE DATABASE' in stmt.upper():
                       continue
 
+                  # Skip ALTER TABLE ADD PROJECTION (not supported in ClickHouse Cloud)
+                  if 'ADD PROJECTION' in stmt.upper():
+                      print(f"  Skipping projection (not supported in ClickHouse Cloud)")
+                      continue
+
                   # Show preview
                   preview = ' '.join(stmt.split())[:70]
                   print(f"  Running: {preview}...")
