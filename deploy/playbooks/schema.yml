@@ -5,10 +5,8 @@
 # This is IDEMPOTENT - safe to run multiple times.
 # All statements use CREATE TABLE/VIEW IF NOT EXISTS.
 #
-# For future migrations, consider:
-# - Numbered migration files (001_initial.sql, 002_add_index.sql, etc.)
-# - A migrations table to track what's been applied
-# - Tools like golang-migrate or flyway
+# Note: ClickHouse Cloud doesn't support multi-statement queries via HTTP,
+# so we split the schema and run each statement individually.
 
 - name: Setup ClickHouse schema
   hosts: all
@@ -54,35 +52,112 @@
         msg: "schema.sql not found at {{ app_dir }}/docs/schema.sql"
       when: not schema_file.stat.exists
 
-    - name: Apply ClickHouse schema
+    - name: Create database
       ansible.builtin.shell:
         cmd: |
-          curl -s -X POST '{{ ch_url }}' --data-binary @{{ app_dir }}/docs/schema.sql
+          curl -sf '{{ ch_url }}' --data 'CREATE DATABASE IF NOT EXISTS nostr'
+      register: create_db_result
+      changed_when: true
+
+    - name: Create schema runner script
+      ansible.builtin.copy:
+        dest: "{{ app_dir }}/run_schema.sh"
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          # Split schema.sql by semicolons and run each statement
+          # ClickHouse Cloud doesn't support multi-statement queries
+
+          CH_URL="$1"
+          SCHEMA_FILE="$2"
+
+          # Add database parameter to URL
+          if [[ "$CH_URL" == *"?"* ]]; then
+            CH_URL="${CH_URL}&database=nostr"
+          else
+            CH_URL="${CH_URL}?database=nostr"
+          fi
+
+          echo "Applying schema to ClickHouse..."
+
+          # Read file and split by semicolons, handling multi-line statements
+          statement=""
+          while IFS= read -r line || [[ -n "$line" ]]; do
+            # Skip comment-only lines and empty lines for statement building
+            trimmed=$(echo "$line" | sed 's/^[[:space:]]*//')
+            if [[ "$trimmed" == --* ]] || [[ -z "$trimmed" ]]; then
+              continue
+            fi
+
+            statement="$statement $line"
+
+            # Check if line ends with semicolon (end of statement)
+            if [[ "$line" == *";" ]]; then
+              # Remove the trailing semicolon for the query
+              clean_stmt=$(echo "$statement" | sed 's/;[[:space:]]*$//')
+
+              # Skip USE statements (we use database param instead)
+              if [[ "$clean_stmt" == *"USE nostr"* ]] || [[ "$clean_stmt" == *"USE "* ]]; then
+                statement=""
+                continue
+              fi
+
+              # Skip CREATE DATABASE (already done)
+              if [[ "$clean_stmt" == *"CREATE DATABASE"* ]]; then
+                statement=""
+                continue
+              fi
+
+              # Skip empty statements
+              if [[ -z "$(echo "$clean_stmt" | tr -d '[:space:]')" ]]; then
+                statement=""
+                continue
+              fi
+
+              # Show what we're running (truncated)
+              preview=$(echo "$clean_stmt" | tr '\n' ' ' | cut -c1-70)
+              echo "  Running: ${preview}..."
+
+              # Execute the statement
+              result=$(curl -sf "$CH_URL" --data "$clean_stmt" 2>&1)
+              exit_code=$?
+
+              if [[ $exit_code -ne 0 ]] || [[ "$result" == *"Exception"* ]] || [[ "$result" == *"Error"* ]]; then
+                echo "  ERROR: $result"
+                # Don't fail on "already exists" errors
+                if [[ "$result" != *"already exists"* ]]; then
+                  exit 1
+                fi
+              fi
+
+              statement=""
+            fi
+          done < "$SCHEMA_FILE"
+
+          echo "Schema applied successfully!"
+
+    - name: Run schema script
+      ansible.builtin.shell:
+        cmd: "{{ app_dir }}/run_schema.sh '{{ ch_url }}' '{{ app_dir }}/docs/schema.sql'"
       register: schema_result
       changed_when: true
 
-    - name: Display schema result
+    - name: Display schema output
       ansible.builtin.debug:
-        msg: |
-          Schema applied successfully!
-
-          Tables created (if not existing):
-          - events_local
-          - event_tags_flat_data
-
-          Views created (if not existing):
-          - videos, video_stats, trending_videos
-          - reaction_counts, comment_counts, repost_counts
-          - daily/weekly/monthly_active_users
-          - And more...
+        var: schema_result.stdout_lines
 
     - name: Verify tables exist
       ansible.builtin.shell:
         cmd: |
-          curl -s '{{ ch_url }}' --data "SELECT name FROM system.tables WHERE database = 'nostr' FORMAT TabSeparated"
+          curl -sf '{{ ch_url }}&database=nostr' --data "SELECT name FROM system.tables WHERE database = 'nostr' FORMAT TabSeparated"
       register: tables_result
       changed_when: false
 
     - name: Show existing tables
       ansible.builtin.debug:
-        var: tables_result.stdout_lines
+        msg: "Tables in nostr database: {{ tables_result.stdout_lines }}"
+
+    - name: Cleanup schema script
+      ansible.builtin.file:
+        path: "{{ app_dir }}/run_schema.sh"
+        state: absent
