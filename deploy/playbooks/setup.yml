@@ -5,6 +5,8 @@
 - name: Setup Funnel server
   hosts: all
   become: true
+  vars_files:
+    - ../group_vars/all.yml
 
   pre_tasks:
     - name: Update apt cache

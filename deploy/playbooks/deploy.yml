@@ -7,6 +7,8 @@
   hosts: all
   become: true
   become_user: "{{ deploy_user }}"
+  vars_files:
+    - ../group_vars/all.yml
 
   tasks:
     - name: Clone/update repository

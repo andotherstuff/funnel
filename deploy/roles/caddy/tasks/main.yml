@@ -36,7 +36,7 @@
     owner: root
     group: root
     mode: "0644"
-    validate: "caddy validate --config %s"
+    validate: "caddy validate --adapter caddyfile --config %s"
   notify: Reload Caddy
 
 - name: Ensure Caddy is started and enabled
