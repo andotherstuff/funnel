@@ -44,7 +44,7 @@ services:
       - |
         echo "Waiting for strfry..."
         sleep 3
-        /usr/local/bin/strfry --config /app/strfry.conf stream --dir both | /app/funnel-ingestion
+        /usr/local/bin/strfry stream ws://strfry:7777 --dir down | /app/funnel-ingestion
     volumes:
       - strfry_data:/app/strfry-db  # strfry stream needs write access to LMDB
       - ./config/strfry.conf:/app/strfry.conf:ro
