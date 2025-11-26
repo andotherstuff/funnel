@@ -30,8 +30,7 @@ impl ClickHouseConfig {
     pub fn from_env() -> Result<Self, ClickHouseError> {
         let url = std::env::var("CLICKHOUSE_URL")
             .map_err(|_| ClickHouseError::Config("CLICKHOUSE_URL not set".to_string()))?;
-        let database =
-            std::env::var("CLICKHOUSE_DATABASE").unwrap_or_else(|_| "nostr".to_string());
+        let database = std::env::var("CLICKHOUSE_DATABASE").unwrap_or_else(|_| "nostr".to_string());
         let user = std::env::var("CLICKHOUSE_USER").ok();
         let password = std::env::var("CLICKHOUSE_PASSWORD").ok();
 

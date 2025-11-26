@@ -25,7 +25,5 @@ funnel-proto.workspace = true
 funnel-clickhouse.workspace = true
 funnel-observability.workspace = true
 
-# Websocket client
-tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
-futures-util = "0.3"
-url = "2"
+# Nostr SDK for relay connections
+nostr-sdk = "0.44"
