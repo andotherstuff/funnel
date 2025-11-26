@@ -1,4 +1,5 @@
 use clickhouse::Client;
+use url::Url;
 
 use crate::error::ClickHouseError;
 use crate::queries::{EventRow, TrendingVideo, VideoHashtag, VideoStats};
@@ -13,13 +14,45 @@ pub struct ClickHouseClient {
 impl ClickHouseClient {
     /// Create a new client connected to the given URL.
     ///
-    /// URL should be in the format `http://host:port` (default port 8123).
+    /// URL can be in the format:
+    /// - `http://host:port` (default port 8123)
+    /// - `https://host:port?user=default&password=xxx` (with credentials in query params)
     pub fn new(url: &str, database: &str) -> Result<Self, ClickHouseError> {
-        let client = Client::default()
-            .with_url(url)
+        let parsed_url = Url::parse(url).map_err(|e| {
+            ClickHouseError::Config(format!("Invalid ClickHouse URL: {}", e))
+        })?;
+
+        // Extract user and password from query params
+        let user = parsed_url
+            .query_pairs()
+            .find(|(k, _)| k == "user")
+            .map(|(_, v)| v.to_string());
+        let password = parsed_url
+            .query_pairs()
+            .find(|(k, _)| k == "password")
+            .map(|(_, v)| v.to_string());
+
+        // Build base URL without query params
+        let base_url = format!(
+            "{}://{}:{}",
+            parsed_url.scheme(),
+            parsed_url.host_str().unwrap_or("localhost"),
+            parsed_url.port().unwrap_or(if parsed_url.scheme() == "https" { 8443 } else { 8123 })
+        );
+
+        let mut client = Client::default()
+            .with_url(&base_url)
             .with_database(database)
             .with_option("async_insert", "1")
             .with_option("wait_for_async_insert", "0");
+
+        // Add auth if present
+        if let Some(u) = user {
+            client = client.with_user(u);
+        }
+        if let Some(p) = password {
+            client = client.with_password(p);
+        }
 
         Ok(Self {
             client,
