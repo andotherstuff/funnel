@@ -1,6 +1,7 @@
 ---
 # Funnel Application Deployment Playbook
 # Run: ansible-playbook playbooks/deploy.yml
+# Run with rebuild: ansible-playbook playbooks/deploy.yml -e force_rebuild=true
 # Assumes setup.yml has already been run
 
 - name: Deploy Funnel application
@@ -9,6 +10,8 @@
   become_user: "{{ deploy_user }}"
   vars_files:
     - ../group_vars/all.yml
+  vars:
+    force_rebuild: false
 
   tasks:
     - name: Check if app directory exists
@@ -31,31 +34,54 @@
         chdir: "{{ app_dir }}"
       register: git_pull
       changed_when: "'Already up to date' not in git_pull.stdout"
-      failed_when: false
+      failed_when: git_pull.rc != 0
       when: app_dir_stat.stat.exists
+
+    - name: Show git status
+      ansible.builtin.debug:
+        msg: "{{ git_pull.stdout | default('Repository cloned') }}"
 
     - name: Check if .env exists
       ansible.builtin.stat:
         path: "{{ app_dir }}/.env"
       register: env_file
 
-    - name: Warn if .env missing
-      ansible.builtin.debug:
-        msg: "⚠️  .env file not found! Copy .env.example and configure it."
+    - name: Fail if .env missing
+      ansible.builtin.fail:
+        msg: |
+          .env file not found at {{ app_dir }}/.env
+          Please create it from .env.example with your configuration:
+            ssh {{ ansible_user }}@{{ ansible_host }}
+            cd {{ app_dir }}
+            cp .env.example .env
+            nano .env
       when: not env_file.stat.exists
 
-    - name: Build Docker images
+    - name: Build Docker images (with cache)
       community.docker.docker_compose_v2:
         project_src: "{{ app_dir }}"
         build: always
         state: present
-      when: env_file.stat.exists
+      when: not force_rebuild | bool
 
-    - name: Start services
+    - name: Build Docker images (no cache - forced rebuild)
+      ansible.builtin.command:
+        cmd: docker compose build --no-cache
+        chdir: "{{ app_dir }}"
+      register: build_result
+      changed_when: true
+      when: force_rebuild | bool
+
+    - name: Start/update services
       community.docker.docker_compose_v2:
         project_src: "{{ app_dir }}"
         state: present
-      when: env_file.stat.exists
+        pull: always
+      register: compose_result
+
+    - name: Wait for services to stabilize
+      ansible.builtin.pause:
+        seconds: 15
 
     - name: Display service status
       ansible.builtin.command:
@@ -63,9 +89,19 @@
         chdir: "{{ app_dir }}"
       register: compose_status
       changed_when: false
-      when: env_file.stat.exists
 
     - name: Show status
       ansible.builtin.debug:
-        var: compose_status.stdout_lines
-      when: env_file.stat.exists
+        msg: "{{ compose_status.stdout_lines }}"
+
+    - name: Check for unhealthy services
+      ansible.builtin.shell:
+        cmd: docker compose ps --format json | grep -i unhealthy || true
+        chdir: "{{ app_dir }}"
+      register: unhealthy_check
+      changed_when: false
+
+    - name: Warn about unhealthy services
+      ansible.builtin.debug:
+        msg: "⚠️  Some services may be unhealthy. Check logs with: docker compose logs"
+      when: unhealthy_check.stdout | length > 0
