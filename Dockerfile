@@ -53,8 +53,14 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install strfry for the stream command
+# Copy strfry binary and ALL its Alpine dependencies
 COPY --from=ghcr.io/hoytech/strfry:latest /app/strfry /usr/local/bin/strfry
+COPY --from=ghcr.io/hoytech/strfry:latest /lib/ld-musl-x86_64.so.1 /lib/
+COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/liblmdb.so.0 /usr/lib/
+COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libcrypto.so.50 /usr/lib/
+COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libssl.so.53 /usr/lib/
+COPY --from=ghcr.io/hoytech/strfry:latest /usr/lib/libsecp256k1.so.2 /usr/lib/
+COPY --from=ghcr.io/hoytech/strfry:latest /lib/libc.musl-x86_64.so.1 /lib/
 
 WORKDIR /app
 
