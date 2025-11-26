@@ -61,84 +61,91 @@
 
     - name: Create schema runner script
       ansible.builtin.copy:
-        dest: "{{ app_dir }}/run_schema.sh"
+        dest: "{{ app_dir }}/run_schema.py"
         mode: "0755"
         content: |
-          #!/bin/bash
-          # Split schema.sql by semicolons and run each statement
-          # ClickHouse Cloud doesn't support multi-statement queries
+          #!/usr/bin/env python3
+          """Split schema.sql and run each statement individually.
+          ClickHouse Cloud doesn't support multi-statement queries via HTTP.
+          """
+          import sys
+          import re
+          import subprocess
 
-          CH_URL="$1"
-          SCHEMA_FILE="$2"
+          def main():
+              if len(sys.argv) != 3:
+                  print("Usage: run_schema.py <clickhouse_url> <schema_file>")
+                  sys.exit(1)
 
-          # Add database parameter to URL
-          if [[ "$CH_URL" == *"?"* ]]; then
-            CH_URL="${CH_URL}&database=nostr"
-          else
-            CH_URL="${CH_URL}?database=nostr"
-          fi
+              ch_url = sys.argv[1]
+              schema_file = sys.argv[2]
 
-          echo "Applying schema to ClickHouse..."
+              # Add database parameter to URL
+              if '?' in ch_url:
+                  ch_url = f"{ch_url}&database=nostr"
+              else:
+                  ch_url = f"{ch_url}?database=nostr"
 
-          # Read file and split by semicolons, handling multi-line statements
-          statement=""
-          while IFS= read -r line || [[ -n "$line" ]]; do
-            # Skip comment-only lines and empty lines for statement building
-            trimmed=$(echo "$line" | sed 's/^[[:space:]]*//')
-            if [[ "$trimmed" == --* ]] || [[ -z "$trimmed" ]]; then
-              continue
-            fi
+              print("Applying schema to ClickHouse...")
 
-            statement="$statement $line"
+              # Read the schema file
+              with open(schema_file, 'r') as f:
+                  content = f.read()
 
-            # Check if line ends with semicolon (end of statement)
-            if [[ "$line" == *";" ]]; then
-              # Remove the trailing semicolon for the query
-              clean_stmt=$(echo "$statement" | sed 's/;[[:space:]]*$//')
+              # Remove comments
+              content = re.sub(r'--.*$', '', content, flags=re.MULTILINE)
 
-              # Skip USE statements (we use database param instead)
-              if [[ "$clean_stmt" == *"USE nostr"* ]] || [[ "$clean_stmt" == *"USE "* ]]; then
-                statement=""
-                continue
-              fi
+              # Split by semicolons (keeping track of statement boundaries)
+              statements = []
+              current = ""
+              for line in content.split('\n'):
+                  line = line.strip()
+                  if not line:
+                      continue
+                  current += " " + line
+                  if line.endswith(';'):
+                      stmt = current.strip().rstrip(';').strip()
+                      if stmt:
+                          statements.append(stmt)
+                      current = ""
 
-              # Skip CREATE DATABASE (already done)
-              if [[ "$clean_stmt" == *"CREATE DATABASE"* ]]; then
-                statement=""
-                continue
-              fi
+              # Run each statement
+              for stmt in statements:
+                  # Skip USE and CREATE DATABASE (handled separately)
+                  if stmt.upper().startswith('USE ') or 'CREATE DATABASE' in stmt.upper():
+                      continue
 
-              # Skip empty statements
-              if [[ -z "$(echo "$clean_stmt" | tr -d '[:space:]')" ]]; then
-                statement=""
-                continue
-              fi
+                  # Show preview
+                  preview = ' '.join(stmt.split())[:70]
+                  print(f"  Running: {preview}...")
 
-              # Show what we're running (truncated)
-              preview=$(echo "$clean_stmt" | tr '\n' ' ' | cut -c1-70)
-              echo "  Running: ${preview}..."
+                  # Write statement to temp file to avoid escaping issues
+                  with open('/tmp/ch_stmt.sql', 'w') as f:
+                      f.write(stmt)
 
-              # Execute the statement
-              result=$(curl -sf "$CH_URL" --data "$clean_stmt" 2>&1)
-              exit_code=$?
+                  # Execute via curl
+                  result = subprocess.run(
+                      ['curl', '-sf', ch_url, '--data-binary', '@/tmp/ch_stmt.sql'],
+                      capture_output=True,
+                      text=True
+                  )
 
-              if [[ $exit_code -ne 0 ]] || [[ "$result" == *"Exception"* ]] || [[ "$result" == *"Error"* ]]; then
-                echo "  ERROR: $result"
-                # Don't fail on "already exists" errors
-                if [[ "$result" != *"already exists"* ]]; then
-                  exit 1
-                fi
-              fi
+                  if result.returncode != 0 or 'Exception' in result.stdout or 'Error' in result.stdout:
+                      error_msg = result.stdout or result.stderr
+                      if 'already exists' not in error_msg.lower():
+                          print(f"  ERROR: {error_msg}")
+                          sys.exit(1)
+                      else:
+                          print(f"  (already exists, skipping)")
 
-              statement=""
-            fi
-          done < "$SCHEMA_FILE"
+              print("Schema applied successfully!")
 
-          echo "Schema applied successfully!"
+          if __name__ == '__main__':
+              main()
 
     - name: Run schema script
       ansible.builtin.shell:
-        cmd: "{{ app_dir }}/run_schema.sh '{{ ch_url }}' '{{ app_dir }}/docs/schema.sql'"
+        cmd: "python3 {{ app_dir }}/run_schema.py '{{ ch_url }}' '{{ app_dir }}/docs/schema.sql'"
       register: schema_result
       changed_when: true
 
@@ -159,5 +166,10 @@
 
     - name: Cleanup schema script
       ansible.builtin.file:
-        path: "{{ app_dir }}/run_schema.sh"
+        path: "{{ app_dir }}/run_schema.py"
+        state: absent
+
+    - name: Cleanup temp SQL file
+      ansible.builtin.file:
+        path: /tmp/ch_stmt.sql
         state: absent
