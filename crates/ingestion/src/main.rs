@@ -84,7 +84,7 @@ async fn run_ingestion(
 ) -> anyhow::Result<()> {
     // Get the latest event timestamp for catch-up
     let since_timestamp = client.get_latest_event_timestamp().await?;
-    
+
     if let Some(ts) = since_timestamp {
         tracing::info!(since = ts, "Catching up from last known event");
     } else {
@@ -120,10 +120,10 @@ async fn run_ingestion(
     loop {
         // Check for flush timeout
         if last_flush_check.elapsed() >= flush_interval {
-            if processor.should_flush() == FlushReason::TimeoutReached {
-                if let Some(batch) = processor.take_batch() {
-                    flush_batch(client, batch).await?;
-                }
+            if processor.should_flush() == FlushReason::TimeoutReached
+                && let Some(batch) = processor.take_batch()
+            {
+                flush_batch(client, batch).await?;
             }
             last_flush_check = Instant::now();
         }
@@ -140,10 +140,10 @@ async fn run_ingestion(
                     processor.push(event);
 
                     // Check if batch is full
-                    if processor.should_flush() == FlushReason::BatchFull {
-                        if let Some(batch) = processor.take_batch() {
-                            flush_batch(client, batch).await?;
-                        }
+                    if processor.should_flush() == FlushReason::BatchFull
+                        && let Some(batch) = processor.take_batch()
+                    {
+                        flush_batch(client, batch).await?;
                     }
                 }
             }
@@ -216,7 +216,7 @@ fn parse_relay_message(text: &str) -> Option<ParsedEvent> {
 
     // Check if it's an EVENT message
     let msg_type = arr.first()?.as_str()?;
-    
+
     if msg_type == "EVENT" && arr.len() >= 3 {
         // arr[1] is subscription ID, arr[2] is the event
         let event_json = arr.get(2)?;

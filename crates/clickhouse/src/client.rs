@@ -263,16 +263,27 @@ impl ClickHouseClient {
 
     /// Get the latest event timestamp for catch-up sync.
     ///
-    /// Returns the maximum `created_at` timestamp from the events table,
+    /// Returns the maximum `created_at` timestamp (as Unix timestamp) from the events table,
     /// or None if the table is empty.
     pub async fn get_latest_event_timestamp(&self) -> Result<Option<i64>, ClickHouseError> {
-        let result: Option<i64> = self
+        // Use toUnixTimestamp to convert DateTime to Unix timestamp
+        // and count() to check if table has any events
+        let count: u64 = self
             .client
-            .query("SELECT max(created_at) FROM events_local")
-            .fetch_optional()
+            .query("SELECT count() FROM events_local")
+            .fetch_one()
             .await?;
 
-        // max() returns 0 for empty table, treat as None
-        Ok(result.filter(|&ts| ts > 0))
+        if count == 0 {
+            return Ok(None);
+        }
+
+        let timestamp: i64 = self
+            .client
+            .query("SELECT toUnixTimestamp(max(created_at)) FROM events_local")
+            .fetch_one()
+            .await?;
+
+        Ok(Some(timestamp))
     }
 }
