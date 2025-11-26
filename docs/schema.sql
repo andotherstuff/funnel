@@ -4,6 +4,38 @@
 --
 -- Usage:
 --   clickhouse-client --multiquery < schema.sql
+--
+-- NOTE: ClickHouse Cloud Limitations
+-- ==================================
+-- ClickHouse Cloud uses SharedMergeTree which doesn't support ALTER TABLE ADD PROJECTION.
+-- The projection statements below are skipped when deploying to ClickHouse Cloud.
+-- 
+-- If you're using self-hosted ClickHouse, you can add projections manually for better
+-- query performance. Projections create alternate sort orders for faster queries.
+--
+-- To add projections manually on self-hosted ClickHouse:
+--
+--   ALTER TABLE events_local ADD PROJECTION events_by_time (
+--       SELECT * ORDER BY (created_at, kind, pubkey)
+--   );
+--   ALTER TABLE events_local ADD PROJECTION events_by_kind (
+--       SELECT * ORDER BY (kind, created_at, pubkey)
+--   );
+--   ALTER TABLE events_local ADD PROJECTION events_by_author (
+--       SELECT * ORDER BY (pubkey, created_at, kind)
+--   );
+--   ALTER TABLE events_local MATERIALIZE PROJECTION events_by_time;
+--   ALTER TABLE events_local MATERIALIZE PROJECTION events_by_kind;
+--   ALTER TABLE events_local MATERIALIZE PROJECTION events_by_author;
+--
+--   ALTER TABLE event_tags_flat_data ADD PROJECTION tags_by_value (
+--       SELECT * ORDER BY (tag_value_primary, tag_name, created_at, event_id)
+--   );
+--   ALTER TABLE event_tags_flat_data ADD PROJECTION tags_by_event (
+--       SELECT * ORDER BY (event_id, tag_name, created_at)
+--   );
+--   ALTER TABLE event_tags_flat_data MATERIALIZE PROJECTION tags_by_value;
+--   ALTER TABLE event_tags_flat_data MATERIALIZE PROJECTION tags_by_event;
 
 -- =============================================================================
 -- DATABASE SETUP
