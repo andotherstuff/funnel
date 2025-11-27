@@ -150,7 +150,11 @@ async fn backfill(
             total_events += rows.len() as u64;
         }
 
-        tracing::info!(batch_inserted = batch.len(), total_events = total_events, "Inserted");
+        tracing::info!(
+            batch_inserted = batch.len(),
+            total_events = total_events,
+            "Inserted"
+        );
 
         until = Some(Timestamp::from(oldest_ts.as_secs().saturating_sub(1)));
         tokio::time::sleep(paginate_interval).await;
@@ -181,7 +185,9 @@ async fn live_stream(
             Filter::new().since(Timestamp::from(ts as u64))
         }
         None => {
-            tracing::info!("No existing events, subscribing to new events only (use BACKFILL=1 for historical)");
+            tracing::info!(
+                "No existing events, subscribing to new events only (use BACKFILL=1 for historical)"
+            );
             Filter::new().since(Timestamp::now())
         }
     };
@@ -318,7 +324,11 @@ async fn flush_batch(
     histogram!(ingestion::WRITE_LATENCY).record(duration.as_secs_f64());
     counter!(ingestion::EVENTS_WRITTEN).increment(batch.len() as u64);
 
-    tracing::debug!(count = batch.len(), duration_ms = duration.as_millis(), "Flushed");
+    tracing::debug!(
+        count = batch.len(),
+        duration_ms = duration.as_millis(),
+        "Flushed"
+    );
 
     batch.clear();
     Ok(())
