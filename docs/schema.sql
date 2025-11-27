@@ -177,16 +177,19 @@ WHERE kind IN (34235, 34236);
 -- =============================================================================
 -- ENGAGEMENT METRICS (Materialized Views)
 -- =============================================================================
+-- NOTE: These MVs read directly from events_local (not from event_tags_flat)
+-- because ClickHouse MVs don't chain - inserts from one MV don't trigger another.
 
 -- Reaction counts per event (kind 7 = reactions)
+-- Extracts the 'e' tag (target event reference) directly from the tags array
 CREATE MATERIALIZED VIEW IF NOT EXISTS reaction_counts
 ENGINE = SummingMergeTree()
 ORDER BY (target_event_id)
 AS SELECT
-    tag_value_primary AS target_event_id,
+    arrayJoin(arrayMap(t -> t[2], arrayFilter(t -> t[1] = 'e', tags))) AS target_event_id,
     count() AS reaction_count
-FROM event_tags_flat
-WHERE kind = 7 AND tag_name = 'e'
+FROM events_local
+WHERE kind = 7
 GROUP BY target_event_id;
 
 -- Comment/reply counts per event (kind 1 with 'e' tag = reply)
@@ -194,10 +197,10 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS comment_counts
 ENGINE = SummingMergeTree()
 ORDER BY (target_event_id)
 AS SELECT
-    tag_value_primary AS target_event_id,
+    arrayJoin(arrayMap(t -> t[2], arrayFilter(t -> t[1] = 'e', tags))) AS target_event_id,
     count() AS comment_count
-FROM event_tags_flat
-WHERE kind = 1 AND tag_name = 'e'
+FROM events_local
+WHERE kind = 1
 GROUP BY target_event_id;
 
 -- Repost/quote counts per event (kind 6 = repost, kind 16 = generic repost)
@@ -205,10 +208,10 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS repost_counts
 ENGINE = SummingMergeTree()
 ORDER BY (target_event_id)
 AS SELECT
-    tag_value_primary AS target_event_id,
+    arrayJoin(arrayMap(t -> t[2], arrayFilter(t -> t[1] = 'e', tags))) AS target_event_id,
     count() AS repost_count
-FROM event_tags_flat
-WHERE kind IN (6, 16) AND tag_name = 'e'
+FROM events_local
+WHERE kind IN (6, 16)
 GROUP BY target_event_id;
 
 -- =============================================================================
