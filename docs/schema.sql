@@ -1,41 +1,17 @@
 -- Funnel ClickHouse Schema
--- Version: 1.2
+-- Version: 1.3
 -- Description: Complete schema for storing Nostr events with video-specific analytics
 --
 -- Usage:
 --   clickhouse-client --multiquery < schema.sql
 --
+-- For a FRESH install, first run the drop section below, then the full schema.
+-- For updates, you may need to drop specific objects that changed.
+--
 -- NOTE: ClickHouse Cloud Limitations
 -- ==================================
 -- ClickHouse Cloud uses SharedMergeTree which doesn't support ALTER TABLE ADD PROJECTION.
--- The projection statements below are skipped when deploying to ClickHouse Cloud.
---
--- If you're using self-hosted ClickHouse, you can add projections manually for better
--- query performance. Projections create alternate sort orders for faster queries.
---
--- To add projections manually on self-hosted ClickHouse:
---
---   ALTER TABLE events_local ADD PROJECTION events_by_time (
---       SELECT * ORDER BY (created_at, kind, pubkey)
---   );
---   ALTER TABLE events_local ADD PROJECTION events_by_kind (
---       SELECT * ORDER BY (kind, created_at, pubkey)
---   );
---   ALTER TABLE events_local ADD PROJECTION events_by_author (
---       SELECT * ORDER BY (pubkey, created_at, kind)
---   );
---   ALTER TABLE events_local MATERIALIZE PROJECTION events_by_time;
---   ALTER TABLE events_local MATERIALIZE PROJECTION events_by_kind;
---   ALTER TABLE events_local MATERIALIZE PROJECTION events_by_author;
---
---   ALTER TABLE event_tags_flat_data ADD PROJECTION tags_by_value (
---       SELECT * ORDER BY (tag_value_primary, tag_name, created_at, event_id)
---   );
---   ALTER TABLE event_tags_flat_data ADD PROJECTION tags_by_event (
---       SELECT * ORDER BY (event_id, tag_name, created_at)
---   );
---   ALTER TABLE event_tags_flat_data MATERIALIZE PROJECTION tags_by_value;
---   ALTER TABLE event_tags_flat_data MATERIALIZE PROJECTION tags_by_event;
+-- The projection statements below may be skipped on ClickHouse Cloud.
 
 -- =============================================================================
 -- DATABASE SETUP
@@ -43,6 +19,35 @@
 
 CREATE DATABASE IF NOT EXISTS nostr;
 USE nostr;
+
+-- =============================================================================
+-- DROP ALL (for fresh install - WARNING: deletes all data!)
+-- =============================================================================
+
+-- -- Views (must drop before tables they depend on)
+-- DROP VIEW IF EXISTS trending_videos;
+-- DROP VIEW IF EXISTS video_stats;
+-- DROP VIEW IF EXISTS video_hashtags;
+-- DROP VIEW IF EXISTS popular_video_hashtags;
+-- DROP VIEW IF EXISTS videos;
+-- DROP VIEW IF EXISTS daily_active_users;
+-- DROP VIEW IF EXISTS weekly_active_users;
+-- DROP VIEW IF EXISTS monthly_active_users;
+-- DROP VIEW IF EXISTS user_profiles;
+-- DROP VIEW IF EXISTS top_video_creators;
+-- DROP VIEW IF EXISTS event_stats;
+-- DROP VIEW IF EXISTS tag_stats;
+-- DROP VIEW IF EXISTS activity_by_kind;
+
+-- -- Materialized Views (DROP TABLE works for MVs)
+-- DROP TABLE IF EXISTS event_tags_flat;
+-- DROP TABLE IF EXISTS reaction_counts;
+-- DROP TABLE IF EXISTS comment_counts;
+-- DROP TABLE IF EXISTS repost_counts;
+
+-- -- Base tables
+-- DROP TABLE IF EXISTS event_tags_flat_data;
+-- DROP TABLE IF EXISTS events_local;
 
 -- =============================================================================
 -- MAIN EVENTS TABLE
@@ -73,33 +78,22 @@ CREATE TABLE IF NOT EXISTS events_local (
 ) ENGINE = ReplacingMergeTree(indexed_at)
 ORDER BY (id)
 PARTITION BY toYYYYMM(created_at)
-SETTINGS
-    index_granularity = 8192,
-    deduplicate_merge_projection_mode = 'drop';
+SETTINGS index_granularity = 8192;
 
--- Projection for time-range queries (most common access pattern)
-ALTER TABLE events_local ADD PROJECTION IF NOT EXISTS events_by_time (
-    SELECT *
-    ORDER BY (created_at, kind, pubkey)
-);
-
--- Projection for kind-first queries (e.g., "get all videos")
-ALTER TABLE events_local ADD PROJECTION IF NOT EXISTS events_by_kind (
-    SELECT *
-    ORDER BY (kind, created_at, pubkey)
-);
-
--- Projection for author queries
-ALTER TABLE events_local ADD PROJECTION IF NOT EXISTS events_by_author (
-    SELECT *
-    ORDER BY (pubkey, created_at, kind)
-);
+-- NOTE: Projections are not supported on ClickHouse Cloud (SharedMergeTree).
+-- For self-hosted ClickHouse, you can add projections for better query performance:
+--   ALTER TABLE events_local ADD PROJECTION events_by_time (SELECT * ORDER BY (created_at, kind, pubkey));
+--   ALTER TABLE events_local ADD PROJECTION events_by_kind (SELECT * ORDER BY (kind, created_at, pubkey));
+--   ALTER TABLE events_local ADD PROJECTION events_by_author (SELECT * ORDER BY (pubkey, created_at, kind));
+--   ALTER TABLE events_local MATERIALIZE PROJECTION events_by_time;
+--   ALTER TABLE events_local MATERIALIZE PROJECTION events_by_kind;
+--   ALTER TABLE events_local MATERIALIZE PROJECTION events_by_author;
 
 -- =============================================================================
 -- TAG MATERIALIZED VIEW
 -- =============================================================================
 
--- Flattened tag storage table
+-- Flattened tag storage table (for advanced tag queries)
 CREATE TABLE IF NOT EXISTS event_tags_flat_data (
     event_id String,
     pubkey String,
@@ -120,18 +114,6 @@ CREATE TABLE IF NOT EXISTS event_tags_flat_data (
 ORDER BY (tag_name, tag_value_primary, created_at, event_id)
 PARTITION BY toYYYYMM(created_at)
 SETTINGS index_granularity = 8192;
-
--- Projection for value-first queries
-ALTER TABLE event_tags_flat_data ADD PROJECTION IF NOT EXISTS tags_by_value (
-    SELECT *
-    ORDER BY (tag_value_primary, tag_name, created_at, event_id)
-);
-
--- Projection for event-first queries
-ALTER TABLE event_tags_flat_data ADD PROJECTION IF NOT EXISTS tags_by_event (
-    SELECT *
-    ORDER BY (event_id, tag_name, created_at)
-);
 
 -- Materialized view to populate tag data
 CREATE MATERIALIZED VIEW IF NOT EXISTS event_tags_flat TO event_tags_flat_data
