@@ -53,12 +53,12 @@ USE nostr;
 -- Projections provide alternate sort orders for time and kind queries.
 CREATE TABLE IF NOT EXISTS events_local (
     -- Event fields (NIP-01)
-    id FixedString(64),           -- 32-byte hex event ID (SHA-256 hash)
-    pubkey FixedString(64),       -- 32-byte hex public key of event creator
+    id String,                    -- 32-byte hex event ID (SHA-256 hash, always 64 chars)
+    pubkey String,                -- 32-byte hex public key (always 64 chars)
     created_at DateTime,          -- Unix timestamp when event was created
     kind UInt16,                  -- Event kind (0-65535, see NIP-01)
     content String CODEC(ZSTD(3)), -- Event content (arbitrary string)
-    sig FixedString(128),         -- 64-byte hex Schnorr signature
+    sig String,                   -- 64-byte hex Schnorr signature (always 128 chars)
     tags Array(Array(String)),    -- Nested array of tags
 
     -- Metadata fields
@@ -101,8 +101,8 @@ ALTER TABLE events_local ADD PROJECTION IF NOT EXISTS events_by_author (
 
 -- Flattened tag storage table
 CREATE TABLE IF NOT EXISTS event_tags_flat_data (
-    event_id FixedString(64),
-    pubkey FixedString(64),
+    event_id String,
+    pubkey String,
     created_at DateTime,
     kind UInt16,
     tag_array Array(String),
