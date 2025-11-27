@@ -16,13 +16,10 @@ firewall_allowed_tcp_ports:
   - 22    # SSH
   - 80    # HTTP (Caddy)
   - 443   # HTTPS (Caddy)
-  - 7777  # strfry WebSocket
 
 # Domain configuration
 domain_base: yourdomain.com
-domain_relay: "relay.{{ domain_base }}"
 domain_api: "api.{{ domain_base }}"
-domain_grafana: "grafana.{{ domain_base }}"
 
 # App configuration
 app_repo: https://github.com/your-org/funnel.git

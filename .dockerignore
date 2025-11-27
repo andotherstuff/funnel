@@ -14,9 +14,7 @@ target/
 .gitignore
 
 # Docker volumes (if mounted locally for dev)
-strfry-db/
 clickhouse-data/
-grafana-data/
 prometheus-data/
 
 # Documentation (not needed in image)

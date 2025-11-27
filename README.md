@@ -1,10 +1,10 @@
 # Funnel
 
-A high-throughput Nostr relay backend for video sharing apps, built with Rust and ClickHouse.
+A high-throughput Nostr analytics backend for video sharing apps, built with Rust and ClickHouse.
 
 ## Overview
 
-Funnel is the analytics and search layer for a Vine-style video sharing app built on Nostr. It sits alongside [strfry](https://github.com/hoytech/strfry) (which handles the core Nostr protocol) and provides:
+Funnel is the analytics and search layer for a Vine-style video sharing app built on Nostr. It ingests events from an external relay and provides:
 
 - **Video stats** — reaction counts, comment counts, reposts
 - **Search** — find videos by hashtag or content
@@ -24,8 +24,8 @@ Funnel is the analytics and search layer for a Vine-style video sharing app buil
                 │ (EVENT/REQ/CLOSE)                 │ (stats, search, feeds)
                 ▼                                   ▼
         ┌───────────────┐                   ┌───────────────┐
-        │    strfry     │                   │   REST API    │
-        │    (LMDB)     │                   │    (Rust)     │
+        │ External Relay│                   │   REST API    │
+        │               │                   │    (Rust)     │
         └───────┬───────┘                   └───────┬───────┘
                 │                                   │
                 │ WebSocket                         │ queries
@@ -36,17 +36,17 @@ Funnel is the analytics and search layer for a Vine-style video sharing app buil
         └───────────────┘                   └───────────────┘
 ```
 
-**strfry** handles EVENT/REQ/CLOSE, subscriptions, and primary storage (LMDB).
+**External Relay** handles EVENT/REQ/CLOSE, subscriptions, and primary storage.
 
-**Ingestion** subscribes to strfry via WebSocket and streams all events to ClickHouse with batched inserts.
+**Ingestion** subscribes to the relay via WebSocket and streams all events to ClickHouse with batched inserts.
 
 **ClickHouse** stores events for complex queries, aggregations, and analytics that Nostr REQ doesn't support.
 
 **REST API** exposes video stats, search, and feeds to the app.
 
-## Why not just use strfry?
+## Why ClickHouse?
 
-strfry is great for standard Nostr queries, but we need:
+Standard Nostr queries are great for real-time protocol operations, but we need:
 
 1. **Aggregations** — count reactions, comments, reposts (Nostr REQ doesn't support)
 2. **Custom sort orders** — trending, popular (beyond `created_at`)
@@ -54,7 +54,7 @@ strfry is great for standard Nostr queries, but we need:
 4. **Analytics** — DAU/WAU/MAU, creator stats, hashtag trends
 5. **Data exports** — for recommendation systems
 
-ClickHouse excels at these analytical queries while strfry handles the real-time Nostr protocol.
+ClickHouse excels at these analytical queries.
 
 ## API Endpoints
 
@@ -76,6 +76,7 @@ All endpoints return JSON with `Cache-Control` headers.
 
 - Docker and Docker Compose
 - ClickHouse instance (self-hosted or [ClickHouse Cloud](https://clickhouse.cloud))
+- An external Nostr relay to ingest events from
 
 ### 1. Set up ClickHouse
 
@@ -100,7 +101,8 @@ clickhouse-client \
 
 ```bash
 cp .env.example .env
-# Edit .env with your ClickHouse URL:
+# Edit .env with your settings:
+# RELAY_URL=wss://your-relay.example.com
 # CLICKHOUSE_URL=https://host:8443?user=default&password=xxx
 ```
 
@@ -111,10 +113,9 @@ docker compose up -d
 ```
 
 This starts:
-- **strfry** on port 7777 (Nostr relay)
 - **API** on port 8080 (REST endpoints)
 - **Prometheus** on port 9090 (metrics)
-- **Grafana** on port 3000 (dashboards)
+- **Ingestion** (internal, streams events from relay to ClickHouse)
 
 ### 4. Ingest events
 
@@ -154,14 +155,6 @@ INFO Inserted batch_inserted=5000 total_events=155000
 - Stop early with `Ctrl+C` if needed; progress is saved to ClickHouse
 - Live ingestion and backfill can run simultaneously
 
-#### Import from JSONL (alternative)
-
-If you have events exported as JSONL, import via strfry:
-
-```bash
-cat events.jsonl | docker exec -i funnel-strfry-1 /app/strfry import
-```
-
 ## Configuration
 
 ### Environment Variables
@@ -185,7 +178,6 @@ CLICKHOUSE_URL=https://your-instance.clickhouse.cloud:8443
 CLICKHOUSE_USER=default
 CLICKHOUSE_PASSWORD=your-password
 CLICKHOUSE_DATABASE=nostr
-GRAFANA_ADMIN_PASSWORD=change-me
 ```
 
 ## Development
@@ -205,11 +197,11 @@ cargo test
 ### Run locally
 
 ```bash
-# Start dependencies
-docker compose up -d strfry prometheus
+# Start prometheus for metrics
+docker compose up -d prometheus
 
 # Run ingestion service
-RELAY_URL=ws://localhost:7777 \
+RELAY_URL=wss://relay.example.com \
 CLICKHOUSE_URL=http://localhost:8123 \
 cargo run --bin funnel-ingestion
 
@@ -225,8 +217,8 @@ just build       # Build all crates
 just test        # Run tests
 just fmt         # Format code
 just lint        # Run clippy
-just docker-up   # Start all services
-just docker-down # Stop all services
+just up          # Start all services
+just down        # Stop all services
 ```
 
 ## Project Structure
@@ -245,7 +237,6 @@ docs/
 └── deployment.md # Production deployment guide
 
 config/
-├── strfry.conf   # strfry configuration
 └── prometheus.yml# Prometheus scrape config
 ```
 

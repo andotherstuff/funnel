@@ -139,9 +139,7 @@ Configure your domains in `group_vars/all.yml`:
 
 ```yaml
 domain_base: funnel.example.com
-domain_relay: "relay.{{ domain_base }}"
 domain_api: "api.{{ domain_base }}"
-domain_grafana: "grafana.{{ domain_base }}"
 ```
 
 ### Firewall Ports
@@ -150,7 +148,6 @@ Default open ports:
 - 22 (SSH)
 - 80 (HTTP)
 - 443 (HTTPS)
-- 7777 (strfry WebSocket)
 
 Modify in `group_vars/all.yml` if needed.
 

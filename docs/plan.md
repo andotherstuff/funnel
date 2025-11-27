@@ -1,15 +1,15 @@
-# Funnel Relay Implementation Plan
+# Funnel Implementation Plan
 
-High-throughput Nostr relay backend supporting a Vine-style video sharing app.
+High-throughput Nostr analytics backend supporting a Vine-style video sharing app.
 
 ## Context
 
-- **Current state**: Nostrify DB (TypeScript/Postgres) struggling with throughput at scale, doesn't have search and complex queries
+- **Current state**: Analytics and search layer for a Nostr video sharing app
 - **Write volume**: Several thousand events/sec
 - **Read volume**: 10-100k reads/sec (most complex queries via custom API, not Nostr REQ)
 - **Video events**: Kinds 34235 (normal) and 34236 (short) - addressable/replaceable per [NIP-71](https://github.com/nostr-protocol/nips/blob/master/71.md)
 - **Video storage**: Metadata in Nostr events, video files on Blossom servers
-- **Migration**: ~millions of events from existing Nostrify instance
+- **External relay**: Events are sourced from an external Nostr relay
 
 ## Architecture Overview
 
@@ -23,9 +23,7 @@ High-throughput Nostr relay backend supporting a Vine-style video sharing app.
                 │                                 │
                 ▼                                 │
        ┌─────────────────┐                        │
-       │     strfry      │                        │
-       │    (single)     │                        │
-       │     + LMDB      │                        │
+       │  External Relay │                        │
        └────────┬────────┘                        │
                 │                                 │
                 │ WebSocket subscription          │
@@ -64,8 +62,7 @@ High-throughput Nostr relay backend supporting a Vine-style video sharing app.
 
 | Decision | Rationale |
 |----------|-----------|
-| **strfry for Nostr protocol** | Battle-tested, LMDB is fast, handles subscriptions efficiently. Don't reinvent the relay. |
-| **Single strfry to start** | Simpler ops. Scale out with negentropy sync later if needed. |
+| **External relay** | Use an existing Nostr relay for protocol handling. Don't reinvent the relay. |
 | **WebSocket subscription for ingestion** | Standard Nostr protocol, supports catch-up sync with `since` filter, reconnection handling. |
 | **ClickHouse for analytics** | Excellent for aggregations, search, and custom sort orders. Not in the hot path for Nostr protocol. |
 | **Docker deployment** | Simpler ops, easy to scale later. |
@@ -76,7 +73,7 @@ High-throughput Nostr relay backend supporting a Vine-style video sharing app.
 | Crate | Purpose | Status |
 |-------|---------|--------|
 | `crates/proto` | Shared Nostr types, video event parsing (kinds 34235/34236), wrap `nostr` crate | ✅ Complete |
-| `crates/ingestion` | WebSocket subscription to strfry, batches writes to ClickHouse | ✅ Complete |
+| `crates/ingestion` | WebSocket subscription to relay, batches writes to ClickHouse | ✅ Complete |
 | `crates/clickhouse` | ClickHouse client wrapper, query builders, connection pooling | ✅ Complete |
 | `crates/api` | Axum HTTP server for custom endpoints | ✅ Complete |
 | `crates/observability` | Prometheus metrics, tracing setup | ✅ Complete |
@@ -139,32 +136,17 @@ Prometheus metrics exposed on `/metrics` for each service:
 - Standard node_exporter for host metrics
 - ClickHouse's built-in Prometheus endpoint
 
-Grafana dashboards for: ingestion pipeline health, API latency/throughput, ClickHouse query performance.
+Prometheus is included for metrics collection. Connect to your existing Grafana instance for dashboards.
 
 ## Docker Compose Services
 
 | Service | Description |
 |---------|-------------|
-| `strfry` | Nostr relay with LMDB storage |
-| `ingestion` | Subscribes to strfry via WebSocket, writes to ClickHouse |
+| `ingestion` | Subscribes to external relay via WebSocket, writes to ClickHouse |
 | `api` | REST API for video stats, search, and feeds |
 | `prometheus` | Metrics collection |
-| `grafana` | Dashboards and alerting |
 
 ClickHouse is expected to be external (self-hosted or ClickHouse Cloud). Configure via `CLICKHOUSE_URL` environment variable.
-
----
-
-## Phase 0 – Migration & Validation ✅ COMPLETE
-
-**Goal:** Replace Nostrify with strfry, validate throughput improvement.
-
-1. ✅ Deploy strfry (single instance) with Docker
-2. ✅ Export events from Nostrify as JSONL
-3. ✅ Import into strfry: `cat events.jsonl | strfry import`
-4. ✅ Point clients at strfry, verify functionality
-5. ✅ Measure: connection count, write latency, REQ query latency
-6. ✅ Set up basic Prometheus + Grafana for strfry host metrics
 
 ---
 
@@ -177,7 +159,7 @@ ClickHouse is expected to be external (self-hosted or ClickHouse Cloud). Configu
 3. ✅ Implement `crates/proto`:
    - ParsedEvent type for ClickHouse insertion
    - VideoMeta extraction from video events
-   - StrfryMessage parsing (for optional strfry stream input)
+   - Message parsing for relay stream input
 4. ✅ Implement `crates/clickhouse`:
    - Client with connection pooling and auth
    - Event insertion with async inserts
@@ -185,7 +167,7 @@ ClickHouse is expected to be external (self-hosted or ClickHouse Cloud). Configu
    - Search queries (hashtag, full-text)
    - Latest timestamp for catch-up sync
 5. ✅ Implement `crates/ingestion`:
-   - WebSocket subscription to strfry relay
+   - WebSocket subscription to relay
    - Catch-up sync with `since` filter (2-day buffer for backdated events)
    - Batched writes (1000 events or 100ms, configurable)
    - Automatic reconnection on disconnect
@@ -202,8 +184,7 @@ ClickHouse is expected to be external (self-hosted or ClickHouse Cloud). Configu
    - Tracing setup (JSON for production, pretty for dev)
    - Prometheus metrics exporter
 8. ✅ Docker Compose setup with health checks
-9. ⏳ Build Grafana dashboards for full pipeline
-10. ⏳ Load test: verify throughput targets
+9. ⏳ Load test: verify throughput targets
 
 ---
 
@@ -213,11 +194,10 @@ ClickHouse is expected to be external (self-hosted or ClickHouse Cloud). Configu
 
 1. Deploy Gorse, feed interaction data from ClickHouse
 2. Add `/api/feed/recommended` endpoint
-3. If strfry hits limits:
-   - Add second strfry instance
-   - Configure negentropy sync
+3. If relay hits limits:
+   - Consider running own relay instance
    - Add Redis for ingestion dedup
-   - Add NATS between strfry and ingestion (optional)
+   - Add NATS between relay and ingestion (optional)
 4. CDN/caching layer in front of API if needed
 5. ClickHouse cluster if single node becomes bottleneck
 
@@ -227,15 +207,13 @@ ClickHouse is expected to be external (self-hosted or ClickHouse Cloud). Configu
 
 | Question | Resolution |
 |----------|------------|
-| ClickHouse as primary storage? | No - strfry/LMDB for Nostr protocol, ClickHouse for analytics only |
-| NATS from start? | No - direct WebSocket to strfry for simplicity |
-| strfry stream vs WebSocket? | WebSocket subscription - supports catch-up sync and standard Nostr protocol |
-| Multi-node strfry? | Start single, scale out with negentropy when needed |
+| ClickHouse as primary storage? | No - external relay for Nostr protocol, ClickHouse for analytics only |
+| NATS from start? | No - direct WebSocket to relay for simplicity |
 | Gorse timing? | Phase 2 |
 
 ## Future Considerations
 
 - **Replaceable event handling**: Kinds 34235/34236 are addressable. ClickHouse's `ReplacingMergeTree` handles updates, but need to ensure materialized views update correctly.
-- **Delete semantics**: NIP-09 deletion events - need to handle in both strfry (native support) and ClickHouse (mark deleted or actually remove).
-- **Rate limiting**: Currently not addressed. Could add at strfry (write policy plugin) or API layer.
-- **Geographic distribution**: Multiple strfry instances in different regions with negentropy sync.
+- **Delete semantics**: NIP-09 deletion events - need to handle in relay (native support) and ClickHouse (mark deleted or actually remove).
+- **Rate limiting**: Currently not addressed. Could add at relay (write policy plugin) or API layer.
+- **Geographic distribution**: Multiple relay instances in different regions with negentropy sync.

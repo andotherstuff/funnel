@@ -124,10 +124,6 @@ stats:
 exec-api *ARGS:
     docker compose exec api {{ARGS}}
 
-# Execute command in strfry container
-exec-strfry *ARGS:
-    docker compose exec strfry {{ARGS}}
-
 # Pull latest images
 pull:
     docker compose pull

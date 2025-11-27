@@ -1,22 +1,7 @@
 # Funnel Caddyfile - managed by Ansible
 # Do not edit manually on the server
 
-# Nostr relay (WebSocket)
-{{ domain_relay }} {
-    reverse_proxy localhost:7777
-}
-
 # REST API
 {{ domain_api }} {
     reverse_proxy localhost:8080
-}
-
-# Grafana dashboards
-{{ domain_grafana }} {
-    reverse_proxy localhost:3000
-
-    # Optional: Add basic auth for extra security
-    # basicauth {
-    #     admin $2a$14$... # Use: caddy hash-password
-    # }
 }

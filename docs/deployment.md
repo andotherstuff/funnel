@@ -9,26 +9,25 @@ Complete guide to deploying Funnel on a bare metal server with ClickHouse Cloud.
 │              Bare Metal Server                   │
 │           (OVH Vint Hill, VA)                    │
 │                                                  │
-│   ┌──────────┐      ┌──────────┐                │
-│   │  strfry  │─────▶│ ingestion│────────────┐   │
-│   │  :7777   │      │(internal)│            │   │       ┌──────────────┐
-│   └────┬─────┘      └──────────┘            │   │       │  ClickHouse  │
-│        │                                    │   │       │    Cloud     │
-│   ┌────┴─────┐      ┌──────────┐            ├───┼──────▶│ (GCP us-east)│
-│   │  caddy   │◀─────│   api    │────────────┘   │       └──────────────┘
-│   │ :80/:443 │      │  :8080   │                │
-│   └────┬─────┘      └──────────┘                │
-│        │                                        │
-│        │            ┌──────────┐  ┌──────────┐  │
-│        └───────────▶│ grafana  │─▶│prometheus│  │
-│                     │  :3000   │  │  :9090   │  │
-│                     └──────────┘  └──────────┘  │
+│   ┌──────────────┐      ┌──────────┐            │
+│   │ External     │─────▶│ ingestion│────────┐   │
+│   │ Relay        │      │(internal)│        │   │       ┌──────────────┐
+│   └──────────────┘      └──────────┘        │   │       │  ClickHouse  │
+│                                             │   │       │    Cloud     │
+│   ┌──────────┐          ┌──────────┐        ├───┼──────▶│ (GCP us-east)│
+│   │  caddy   │◀─────────│   api    │────────┘   │       └──────────────┘
+│   │ :80/:443 │          │  :8080   │            │
+│   └──────────┘          └──────────┘            │
+│                                                  │
+│                         ┌──────────┐            │
+│                         │prometheus│            │
+│                         │  :9090   │            │
+│                         └──────────┘            │
 └─────────────────────────────────────────────────┘
 
 Public (via Caddy):           Internal only:
-• relay.x.com  → strfry       • ingestion (strfry → ClickHouse)
-• api.x.com    → API          • prometheus (metrics collection)
-• grafana.x.com → Grafana     • grafana → prometheus
+• api.x.com    → API          • ingestion (relay → ClickHouse)
+                              • prometheus (metrics collection)
 ```
 
 ## Server Requirements
@@ -90,9 +89,7 @@ Get your public key with: `cat ~/.ssh/id_ed25519.pub`
 
 ```yaml
 domain_base: yourdomain.com
-domain_relay: "relay.{{ domain_base }}"
 domain_api: "api.{{ domain_base }}"
-domain_grafana: "grafana.{{ domain_base }}"
 ```
 
 ## Step 1: Server Setup with Ansible
@@ -113,7 +110,7 @@ This automatically:
 - Updates packages and installs essentials (curl, git, htop, fail2ban, etc.)
 - Creates `deploy` user with sudo access
 - Configures SSH keys and hardens SSH (disables password auth)
-- Sets up UFW firewall (ports 22, 80, 443, 7777)
+- Sets up UFW firewall (ports 22, 80, 443)
 - Installs Docker and Docker Compose
 - Installs Caddy and deploys the Caddyfile
 
@@ -185,6 +182,7 @@ Edit `.env` with your ClickHouse Cloud credentials:
 
 ```bash
 # .env
+RELAY_URL=wss://your-relay.example.com
 CLICKHOUSE_URL=https://your-instance.us-east1.gcp.clickhouse.cloud:8443?user=default&password=YOUR_PASSWORD
 CLICKHOUSE_DATABASE=nostr
 ```
@@ -208,76 +206,39 @@ docker compose logs -f
 ### Verify Services
 
 ```bash
-# Check strfry is accepting connections
-curl -i http://localhost:7777
-
 # Check API health
 curl http://localhost:8080/health
 
 # Check Prometheus
 curl http://localhost:9090/-/healthy
-
-# Check Grafana
-curl http://localhost:3000/api/health
 ```
 
 ## Step 4: Configure DNS
 
-Point your domains to the server IP:
+Point your domain to the server IP:
 
 | Record | Type | Value |
 |--------|------|-------|
-| `relay.yourdomain.com` | A | YOUR_SERVER_IP |
 | `api.yourdomain.com` | A | YOUR_SERVER_IP |
-| `grafana.yourdomain.com` | A | YOUR_SERVER_IP |
 
 Caddy will automatically obtain Let's Encrypt certificates.
 
 ## Step 5: Configure Monitoring
 
-### Grafana Setup
+Prometheus is included for metrics collection. Connect it to your existing Grafana instance:
 
-1. Open `https://grafana.yourdomain.com`
-2. Login with `admin` / `admin` (change immediately!)
-3. Add Prometheus data source: `http://prometheus:9090`
-4. Import dashboards or create custom ones
+1. In your Grafana instance, add a new Prometheus data source
+2. Set the URL to `http://YOUR_SERVER_IP:9090` (or use a private network)
+3. Import dashboards or create custom ones
 
 ### Key Metrics to Monitor
 
 | Metric | Description | Alert Threshold |
 |--------|-------------|-----------------|
-| `ingestion_events_received_total` | Events from strfry | Rate drop |
+| `ingestion_events_received_total` | Events from relay | Rate drop |
 | `ingestion_lag_seconds` | Processing delay | > 60s |
 | `api_request_duration_seconds` | API latency | p99 > 500ms |
 | `api_clickhouse_query_duration_seconds` | DB query time | p99 > 200ms |
-
-## Data Migration
-
-### Import Existing Events from Another Relay
-
-```bash
-# Step 1: Import into strfry (validates signatures)
-cat events.jsonl | docker compose exec -T strfry strfry import
-
-# Step 2: Backfill to ClickHouse
-docker compose exec strfry strfry export | \
-  docker compose exec -T ingestion /app/funnel-ingestion
-```
-
-### Backfill Performance Tips
-
-For large imports (millions of events):
-
-```bash
-# Increase batch size for faster backfill
-docker compose exec -e BATCH_SIZE=5000 strfry \
-  strfry export | docker compose exec -T ingestion /app/funnel-ingestion
-
-# Filter by kind (videos only)
-docker compose exec strfry \
-  strfry export --filter '{"kinds":[34235,34236]}' | \
-  docker compose exec -T ingestion /app/funnel-ingestion
-```
 
 ## Maintenance
 
@@ -320,20 +281,6 @@ cd deploy
 ansible-playbook playbooks/setup.yml
 ```
 
-### Backup strfry Database
-
-```bash
-# Stop strfry briefly for consistent backup
-docker compose stop strfry
-
-# Backup LMDB (fast, just copy files)
-sudo tar -czf /backup/strfry-$(date +%Y%m%d).tar.gz \
-  /var/lib/docker/volumes/funnel_strfry_data/_data/
-
-# Restart
-docker compose start strfry
-```
-
 ### ClickHouse Maintenance
 
 ClickHouse Cloud handles backups automatically. For manual exports:
@@ -365,11 +312,11 @@ ansible-playbook playbooks/setup.yml --private-key ~/.ssh/your_key
 ### Ingestion Not Receiving Events
 
 ```bash
-# Check strfry stream is working
-docker compose exec strfry strfry stream --dir both | head -5
-
 # Check ingestion logs
 docker compose logs ingestion
+
+# Verify relay URL is correct
+echo $RELAY_URL
 ```
 
 ### API Returns 500 Errors
@@ -380,16 +327,6 @@ docker compose exec api curl -s "$CLICKHOUSE_URL/?query=SELECT%201"
 
 # Check API logs
 docker compose logs api
-```
-
-### High Memory Usage
-
-```bash
-# Check container stats
-docker stats
-
-# strfry LMDB can use lots of RAM for caching - this is normal
-# Reduce if needed by adjusting mapsize in config/strfry.conf
 ```
 
 ### Firewall Locked You Out
