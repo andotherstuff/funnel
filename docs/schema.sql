@@ -222,12 +222,13 @@ LEFT JOIN comment_counts c ON v.id = c.target_event_id
 LEFT JOIN repost_counts rp ON v.id = rp.target_event_id;
 
 -- Trending videos (recent videos with high engagement)
+-- Uses 30-day window with time decay (newer content ranks higher)
 CREATE VIEW IF NOT EXISTS trending_videos AS
 SELECT
     *,
-    engagement_score * exp(-dateDiff('hour', created_at, now()) / 24.0) AS trending_score
+    engagement_score * exp(-dateDiff('hour', created_at, now()) / 168.0) AS trending_score
 FROM video_stats
-WHERE created_at > now() - INTERVAL 7 DAY
+WHERE created_at > now() - INTERVAL 30 DAY
 ORDER BY trending_score DESC;
 
 -- Videos by hashtag
