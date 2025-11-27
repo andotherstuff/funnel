@@ -3,6 +3,11 @@
 # Run: ansible-playbook playbooks/deploy.yml
 # Run with rebuild: ansible-playbook playbooks/deploy.yml -e force_rebuild=true
 # Assumes setup.yml has already been run
+#
+# After first deploy, run backfill to fetch historical events:
+#   ssh deploy@<server> "cd ~/funnel && docker compose run --rm backfill"
+#
+# The backfill container will exit when done. Live ingestion runs continuously.
 
 - name: Deploy Funnel application
   hosts: all

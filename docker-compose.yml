@@ -26,21 +26,41 @@ services:
       context: .
       dockerfile: Dockerfile
       target: ingestion
-    depends_on:
-      strfry:
-        condition: service_healthy
     environment:
-      - RELAY_URL=${RELAY_URL:-ws://strfry:7777}
+      - RELAY_URL=${RELAY_URL:?Set RELAY_URL in .env}
       - CLICKHOUSE_URL=${CLICKHOUSE_URL:?Set CLICKHOUSE_URL in .env}
       - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD in .env}
       - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-nostr}
       - BATCH_SIZE=1000
-      - FLUSH_INTERVAL_MS=100
       - RUST_LOG=info
     networks:
       - internal
     restart: unless-stopped
+
+  # One-shot backfill service - run manually with:
+  #   docker compose run --rm backfill
+  # This paginates through all historical events from the relay.
+  # ClickHouse deduplicates by event ID, so it's safe to re-run.
+  backfill:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ingestion
+    profiles:
+      - backfill
+    environment:
+      - RELAY_URL=${RELAY_URL:?Set RELAY_URL in .env}
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL:?Set CLICKHOUSE_URL in .env}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD in .env}
+      - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-nostr}
+      - BATCH_SIZE=1000
+      - BACKFILL=1
+      - RUST_LOG=info
+    networks:
+      - internal
+    restart: "no"
 
   api:
     build:

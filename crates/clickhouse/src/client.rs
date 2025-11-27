@@ -70,9 +70,7 @@ impl ClickHouseClient {
 
         let mut client = Client::default()
             .with_url(&base_url)
-            .with_database(&config.database)
-            .with_option("async_insert", "1")
-            .with_option("wait_for_async_insert", "0");
+            .with_database(&config.database);
 
         // Add auth if present
         if let Some(ref u) = config.user {
@@ -122,12 +120,22 @@ impl ClickHouseClient {
         let mut insert = self.client.insert("events_local")?;
 
         for event in events {
-            insert.write(event).await?;
+            if let Err(e) = insert.write(event).await {
+                tracing::error!(
+                    event_id = %event.id,
+                    error = %e,
+                    "Failed to write event to insert buffer"
+                );
+                return Err(e.into());
+            }
         }
 
-        insert.end().await?;
+        if let Err(e) = insert.end().await {
+            tracing::error!(error = %e, count = events.len(), "Failed to commit insert batch");
+            return Err(e.into());
+        }
 
-        tracing::debug!(count = events.len(), "Inserted events batch");
+        tracing::info!(count = events.len(), "Inserted events batch");
         Ok(())
     }
 

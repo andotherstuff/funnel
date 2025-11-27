@@ -116,14 +116,77 @@ This starts:
 - **Prometheus** on port 9090 (metrics)
 - **Grafana** on port 3000 (dashboards)
 
-### 4. Import existing events (optional)
+### 4. Ingest events
+
+The ingestion service operates in two modes:
+
+#### Live Mode (default)
+
+Automatically starts with `docker compose up` and streams new events in real-time:
 
 ```bash
-# Export from another relay or database as JSONL
-cat events.jsonl | docker exec -i funnel-strfry-1 strfry import
+docker compose up -d
+docker compose logs -f ingestion
 ```
 
-The ingestion service will automatically catch up on events it missed while stopped.
+Live mode subscribes from the last known event timestamp (with a 2-day buffer) so it catches up on any events missed while stopped.
+
+#### Backfill Mode (historical sync)
+
+To import all historical events from a relay, run the backfill container:
+
+```bash
+# Run backfill (one-time, will exit when complete)
+docker compose run --rm backfill
+```
+
+Backfill paginates through the entire relay history in batches of 5,000 events, walking backwards in time. Progress is logged:
+
+```
+INFO Fetching batch until=2024-01-15T10:30:00Z limit=5000 total_so_far=150000
+INFO Received batch count=5000 oldest=2024-01-14T22:15:33Z
+INFO Inserted batch_inserted=5000 total_events=155000
+```
+
+**Notes:**
+- Backfill is safe to re-run — ClickHouse deduplicates by event ID
+- Run backfill in `tmux` or `screen` for long-running syncs
+- Stop early with `Ctrl+C` if needed; progress is saved to ClickHouse
+- Live ingestion and backfill can run simultaneously
+
+#### Import from JSONL (alternative)
+
+If you have events exported as JSONL, import via strfry:
+
+```bash
+cat events.jsonl | docker exec -i funnel-strfry-1 /app/strfry import
+```
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `RELAY_URL` | Yes | — | WebSocket URL of the Nostr relay to ingest from |
+| `CLICKHOUSE_URL` | Yes | — | ClickHouse server URL (e.g., `https://host:8443`) |
+| `CLICKHOUSE_USER` | No | `default` | ClickHouse username |
+| `CLICKHOUSE_PASSWORD` | Yes | — | ClickHouse password |
+| `CLICKHOUSE_DATABASE` | No | `nostr` | ClickHouse database name |
+| `BATCH_SIZE` | No | `1000` | Events per insert batch |
+| `BACKFILL` | No | — | Set to `1` to run in backfill mode |
+| `RUST_LOG` | No | `info` | Log level (`debug`, `info`, `warn`, `error`) |
+
+### Example `.env`
+
+```bash
+RELAY_URL=wss://relay.example.com
+CLICKHOUSE_URL=https://your-instance.clickhouse.cloud:8443
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=your-password
+CLICKHOUSE_DATABASE=nostr
+GRAFANA_ADMIN_PASSWORD=change-me
+```
 
 ## Development
 
