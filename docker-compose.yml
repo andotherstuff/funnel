@@ -51,6 +51,7 @@ services:
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD in .env}
       - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-nostr}
       - BIND_ADDR=0.0.0.0:8080
+      - API_TOKEN=${API_TOKEN:-}
       - RUST_LOG=info
     ports:
       - "8080:8080"

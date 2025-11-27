@@ -4,7 +4,7 @@
 
 use std::env;
 
-use funnel_api::{AppState, create_router};
+use funnel_api::{AppState, AuthConfig, create_router};
 use funnel_clickhouse::{ClickHouseClient, ClickHouseConfig};
 use funnel_observability::init_tracing_dev;
 
@@ -14,6 +14,14 @@ async fn main() -> anyhow::Result<()> {
 
     let ch_config = ClickHouseConfig::from_env()?;
     let bind_addr = env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+
+    // Load auth config from environment (optional)
+    let auth_config = AuthConfig::from_env();
+    if auth_config.is_some() {
+        tracing::info!("API authentication enabled");
+    } else {
+        tracing::warn!("API authentication disabled - set API_TOKEN to enable");
+    }
 
     tracing::info!(
         clickhouse_url = %ch_config.safe_url(),
@@ -33,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(version = %version, "Connected to ClickHouse");
 
     let state = AppState::new(clickhouse);
-    let app = create_router(state, metrics_handle);
+    let app = create_router(state, metrics_handle, auth_config);
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
     tracing::info!("Listening on {}", bind_addr);

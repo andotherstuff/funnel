@@ -161,9 +161,46 @@ clickhouse-client \
 
 Expected tables: `events_local`, `event_tags_flat_data`, plus views.
 
-## Step 3: Deploy Application
+## Step 3: Configure Ansible Variables
 
-SSH into the server and clone the repo:
+Configure your deployment in `deploy/group_vars/all.yml`:
+
+```yaml
+# ClickHouse configuration
+clickhouse_url: "https://your-instance.us-east1.gcp.clickhouse.cloud:8443"
+clickhouse_user: "default"
+clickhouse_password: "YOUR_PASSWORD"
+clickhouse_database: "nostr"
+
+# Relay to ingest events from
+relay_url: "wss://your-relay.example.com"
+
+# API Authentication (generate with: openssl rand -hex 32)
+api_token: "your-secure-token-here"
+```
+
+> **Note:** Leave `api_token` empty to disable authentication (not recommended for production).
+
+## Step 4: Deploy Application
+
+Deploy using the Ansible playbook:
+
+```bash
+cd deploy
+
+# Deploy application (clones repo, deploys .env, builds and starts services)
+ansible-playbook playbooks/deploy.yml
+```
+
+This will:
+- Clone or update the repository on the server
+- Deploy the `.env` file from your Ansible variables
+- Build Docker images
+- Start all services
+
+### Manual Deployment (Alternative)
+
+If you prefer manual deployment, SSH into the server:
 
 ```bash
 ssh deploy@YOUR_SERVER_IP
@@ -172,48 +209,29 @@ ssh deploy@YOUR_SERVER_IP
 git clone https://github.com/your-org/funnel.git ~/funnel
 cd ~/funnel
 
-# Create environment file
+# Create environment file manually
 cp .env.example .env
-```
+nano .env  # Edit with your values
 
-### Configure Environment Variables
-
-Edit `.env` with your ClickHouse Cloud credentials:
-
-```bash
-# .env
-RELAY_URL=wss://your-relay.example.com
-CLICKHOUSE_URL=https://your-instance.us-east1.gcp.clickhouse.cloud:8443?user=default&password=YOUR_PASSWORD
-CLICKHOUSE_DATABASE=nostr
-```
-
-### Build and Start Services
-
-```bash
-# Build Docker images
+# Build and start
 docker compose build
-
-# Start all services
 docker compose up -d
-
-# Check status
-docker compose ps
-
-# View logs
-docker compose logs -f
 ```
 
 ### Verify Services
 
 ```bash
-# Check API health
+# Check API health (no auth required)
 curl http://localhost:8080/health
 
 # Check Prometheus
 curl http://localhost:9090/-/healthy
+
+# Test authenticated API endpoint
+curl -H "Authorization: Bearer YOUR_API_TOKEN" http://localhost:8080/api/stats
 ```
 
-## Step 4: Configure DNS
+## Step 5: Configure DNS
 
 Point your domain to the server IP:
 
@@ -223,7 +241,7 @@ Point your domain to the server IP:
 
 Caddy will automatically obtain Let's Encrypt certificates.
 
-## Step 5: Configure Monitoring
+## Step 6: Configure Monitoring
 
 Prometheus is included for metrics collection. Connect it to your existing Grafana instance:
 
@@ -370,13 +388,50 @@ ansible-playbook playbooks/setup.yml --tags docker
 ansible-playbook -i inventory/staging.yml playbooks/setup.yml
 ```
 
+## API Authentication
+
+The API uses bearer token authentication. All `/api/*` endpoints require authentication when `API_TOKEN` is set.
+
+### Configuring the Token
+
+Set `api_token` in `deploy/group_vars/all.yml`:
+
+```yaml
+# Generate a secure token
+# openssl rand -hex 32
+api_token: "a1b2c3d4e5f6..."
+```
+
+Then redeploy:
+
+```bash
+ansible-playbook playbooks/deploy.yml
+```
+
+### Using the API
+
+Include the token in requests:
+
+```bash
+curl -H "Authorization: Bearer YOUR_TOKEN" https://api.yourdomain.com/api/videos
+```
+
+### Rotating the Token
+
+1. Generate a new token: `openssl rand -hex 32`
+2. Update `api_token` in `deploy/group_vars/all.yml`
+3. Run `ansible-playbook playbooks/deploy.yml`
+4. Update all API clients with the new token
+
+> **Note:** The `/health` and `/metrics` endpoints remain public for monitoring.
+
 ---
 
 ## Open Questions / TODOs
 
 - [ ] Finalize ClickHouse Cloud URLs (staging vs production)
 - [ ] Configure CORS restrictions for API
-- [ ] Decide on API authentication strategy
+- [x] ~~Decide on API authentication strategy~~ (Bearer token implemented)
 - [ ] Set up alerting (PagerDuty/Slack integration)
 - [ ] Configure log rotation
 - [ ] Set up automated backups to S3/GCS

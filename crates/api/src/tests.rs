@@ -8,6 +8,7 @@ use funnel_clickhouse::{
     ClickHouseError, StatsQueries, TrendingVideo, VideoHashtag, VideoQueries, VideoStats,
 };
 
+use crate::auth::AuthConfig;
 use crate::handlers::AppState;
 use crate::router::create_test_router;
 
@@ -211,7 +212,14 @@ fn make_video_hashtag(id: &str, hashtag: &str, pubkey: &str) -> VideoHashtag {
 
 fn create_test_server(storage: MockStorage) -> TestServer {
     let state = AppState::new(storage);
-    let app = create_test_router(state);
+    let app = create_test_router(state, None);
+    TestServer::new(app).unwrap()
+}
+
+fn create_test_server_with_auth(storage: MockStorage, token: &str) -> TestServer {
+    let state = AppState::new(storage);
+    let auth_config = AuthConfig::new(token);
+    let app = create_test_router(state, Some(auth_config));
     TestServer::new(app).unwrap()
 }
 
@@ -550,4 +558,76 @@ async fn error_responses_have_no_store_cache_header() {
         .to_str()
         .unwrap();
     assert_eq!(cache_control, "no-store");
+}
+
+// Authentication tests
+
+#[tokio::test]
+async fn auth_required_returns_401_without_header() {
+    let server = create_test_server_with_auth(MockStorage::new(), "secret-token");
+
+    let response = server.get("/api/videos").await;
+
+    response.assert_status(StatusCode::UNAUTHORIZED);
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["error"], "Missing authorization header");
+}
+
+#[tokio::test]
+async fn auth_required_returns_401_with_invalid_token() {
+    let server = create_test_server_with_auth(MockStorage::new(), "secret-token");
+
+    let response = server
+        .get("/api/videos")
+        .authorization_bearer("wrong-token")
+        .await;
+
+    response.assert_status(StatusCode::UNAUTHORIZED);
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["error"], "Invalid token");
+}
+
+#[tokio::test]
+async fn auth_succeeds_with_valid_token() {
+    let storage = MockStorage::new().with_videos(vec![make_video_stats(
+        "video1", "pubkey1", "Video 1", 34235,
+    )]);
+    let server = create_test_server_with_auth(storage, "secret-token");
+
+    let response = server
+        .get("/api/videos")
+        .authorization_bearer("secret-token")
+        .await;
+
+    response.assert_status_ok();
+}
+
+#[tokio::test]
+async fn health_endpoint_is_public_even_with_auth_enabled() {
+    let server = create_test_server_with_auth(MockStorage::new(), "secret-token");
+
+    // Health endpoint should not require auth
+    let response = server.get("/health").await;
+
+    response.assert_status_ok();
+    response.assert_json(&serde_json::json!({ "status": "ok" }));
+}
+
+#[tokio::test]
+async fn auth_required_for_all_api_endpoints() {
+    let server = create_test_server_with_auth(MockStorage::new(), "secret-token");
+
+    // All API endpoints should require auth
+    let endpoints = [
+        "/api/videos",
+        "/api/videos/test123/stats",
+        "/api/users/pubkey123/videos",
+        "/api/search?tag=test",
+        "/api/stats",
+    ];
+
+    for endpoint in endpoints {
+        let response = server.get(endpoint).await;
+        response.assert_status(StatusCode::UNAUTHORIZED);
+    }
 }

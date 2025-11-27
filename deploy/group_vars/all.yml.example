@@ -29,8 +29,16 @@ app_branch: main
 # Docker compose project name
 compose_project: funnel
 
-# ClickHouse configuration (for schema setup)
-# Leave empty to read from .env file on server, or set explicitly:
-clickhouse_url: ""
-clickhouse_user: ""
+# ClickHouse configuration
+clickhouse_url: "https://your-instance.clickhouse.cloud:8443"
+clickhouse_user: "default"
 clickhouse_password: ""
+clickhouse_database: "nostr"
+
+# Relay to ingest events from
+relay_url: "wss://relay.example.com"
+
+# API Authentication
+# Generate a secure token with: openssl rand -hex 32
+# Leave empty to disable authentication (not recommended for production)
+api_token: ""

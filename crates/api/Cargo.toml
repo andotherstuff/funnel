@@ -25,6 +25,7 @@ anyhow.workspace = true
 metrics.workspace = true
 metrics-exporter-prometheus.workspace = true
 chrono.workspace = true
+subtle = "2"
 funnel-proto.workspace = true
 funnel-clickhouse.workspace = true
 funnel-observability.workspace = true

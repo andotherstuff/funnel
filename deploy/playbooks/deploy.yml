@@ -46,21 +46,12 @@
       ansible.builtin.debug:
         msg: "{{ git_pull.stdout | default('Repository cloned') }}"
 
-    - name: Check if .env exists
-      ansible.builtin.stat:
-        path: "{{ app_dir }}/.env"
-      register: env_file
-
-    - name: Fail if .env missing
-      ansible.builtin.fail:
-        msg: |
-          .env file not found at {{ app_dir }}/.env
-          Please create it from .env.example with your configuration:
-            ssh {{ ansible_user }}@{{ ansible_host }}
-            cd {{ app_dir }}
-            cp .env.example .env
-            nano .env
-      when: not env_file.stat.exists
+    - name: Deploy .env configuration
+      ansible.builtin.template:
+        src: ../templates/env.j2
+        dest: "{{ app_dir }}/.env"
+        mode: "0600"
+      notify: Restart services
 
     - name: Build Docker images (with cache)
       community.docker.docker_compose_v2:
@@ -110,3 +101,9 @@
       ansible.builtin.debug:
         msg: "⚠️  Some services may be unhealthy. Check logs with: docker compose logs"
       when: unhealthy_check.stdout | length > 0
+
+  handlers:
+    - name: Restart services
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        state: restarted
