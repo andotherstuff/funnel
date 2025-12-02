@@ -312,26 +312,22 @@ impl ClickHouseClient {
     /// Get the latest event timestamp for catch-up sync.
     ///
     /// Returns the maximum `created_at` timestamp (as Unix timestamp) from the events table,
-    /// or None if the table is empty.
+    /// or None if the table is empty or on error (to allow graceful fallback).
     pub async fn get_latest_event_timestamp(&self) -> Result<Option<i64>, ClickHouseError> {
-        // Use toUnixTimestamp to convert DateTime to Unix timestamp
-        // and count() to check if table has any events
-        let count: u64 = self
+        // Use a single query that returns 0 if table is empty
+        // This avoids potential deserialization issues with separate queries
+        match self
             .client
-            .query("SELECT count() FROM events_local")
-            .fetch_one()
-            .await?;
-
-        if count == 0 {
-            return Ok(None);
+            .query("SELECT toInt64(toUnixTimestamp(max(created_at))) FROM events_local WHERE created_at > toDateTime(0)")
+            .fetch_one::<i64>()
+            .await
+        {
+            Ok(0) => Ok(None),
+            Ok(ts) => Ok(Some(ts)),
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to get latest timestamp, starting fresh");
+                Ok(None)
+            }
         }
-
-        let timestamp: i64 = self
-            .client
-            .query("SELECT toUnixTimestamp(max(created_at)) FROM events_local")
-            .fetch_one()
-            .await?;
-
-        Ok(Some(timestamp))
     }
 }
