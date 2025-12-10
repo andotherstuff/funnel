@@ -155,6 +155,20 @@ INFO Inserted batch_inserted=5000 total_events=155000
 - Stop early with `Ctrl+C` if needed; progress is saved to ClickHouse
 - Live ingestion and backfill can run simultaneously
 
+## Deployment Options
+
+### Ansible-managed server (production)
+- Infrastructure-as-code flow in `deploy/`.
+- Run `ansible-playbook playbooks/setup.yml` once for server bootstrap and hardening.
+- Deploy new releases with `ansible-playbook playbooks/deploy.yml`.
+- Detailed instructions live in [`docs/deployment.md`](docs/deployment.md).
+
+### Docker/Compose (self-managed host)
+- Copy `.env.example` to `.env` and fill in relay + ClickHouse credentials.
+- Use the existing `docker-compose.yml` to build locally (`docker compose build && docker compose up -d`) **or** swap the `build:` sections for `image: ghcr.io/<org>/<repo>-{api|ingestion}:<tag>` to consume published releases.
+- Backfill historical data when needed: `docker compose run --rm backfill`.
+- Works on any host with Docker/Compose; no Ansible necessary.
+
 ## Configuration
 
 ### Environment Variables
