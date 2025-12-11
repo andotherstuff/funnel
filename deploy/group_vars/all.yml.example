@@ -35,6 +35,11 @@ clickhouse_user: "default"
 clickhouse_password: ""
 clickhouse_database: "nostr"
 
+# ClickHouse deployment type: "cloud" or "self_hosted"
+# - cloud: Uses schema_cloud.sql (no projections, compatible with SharedMergeTree)
+# - self_hosted: Uses schema_self_hosted.sql (includes projections for better performance)
+clickhouse_deployment: "cloud"
+
 # Relay to ingest events from
 relay_url: "wss://relay.example.com"
 

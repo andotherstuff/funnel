@@ -141,12 +141,15 @@ clickhouse-client \
   --secure \
   --user default \
   --password 'YOUR_PASSWORD' \
-  --multiquery < docs/schema.sql
+  --multiquery < docs/schema_cloud.sql
 
 # Option 2: Using curl
 curl -X POST \
   'https://your-instance.us-east1.gcp.clickhouse.cloud:8443/?user=default&password=YOUR_PASSWORD' \
-  --data-binary @docs/schema.sql
+  --data-binary @docs/schema_cloud.sql
+
+# For self-hosted ClickHouse (includes projections for better performance):
+clickhouse-client --multiquery < docs/schema_self_hosted.sql
 ```
 
 ### Verify Schema

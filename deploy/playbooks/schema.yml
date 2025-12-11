@@ -5,6 +5,10 @@
 # This is IDEMPOTENT - safe to run multiple times.
 # All statements use CREATE TABLE/VIEW IF NOT EXISTS.
 #
+# Schema selection is controlled by the 'clickhouse_deployment' variable:
+# - "cloud": Uses schema_cloud.sql (no projections, for ClickHouse Cloud)
+# - "self_hosted": Uses schema_self_hosted.sql (with projections)
+#
 # Note: ClickHouse Cloud doesn't support multi-statement queries via HTTP,
 # so we split the schema and run each statement individually.
 
@@ -14,6 +18,10 @@
   become_user: "{{ deploy_user }}"
   vars_files:
     - ../group_vars/all.yml
+  vars:
+    # Default to cloud if not specified
+    clickhouse_deployment: "{{ clickhouse_deployment | default('cloud') }}"
+    schema_file: "{{ 'schema_self_hosted.sql' if clickhouse_deployment == 'self_hosted' else 'schema_cloud.sql' }}"
 
   tasks:
     - name: Check if .env exists
@@ -62,15 +70,19 @@
         msg: "CLICKHOUSE_URL not found in .env or group_vars"
       when: ch_base_url == ""
 
-    - name: Check if schema.sql exists
-      ansible.builtin.stat:
-        path: "{{ app_dir }}/docs/schema.sql"
-      register: schema_file
+    - name: Display schema selection
+      ansible.builtin.debug:
+        msg: "Using {{ schema_file }} (deployment type: {{ clickhouse_deployment }})"
 
-    - name: Fail if schema.sql missing
+    - name: Check if schema file exists
+      ansible.builtin.stat:
+        path: "{{ app_dir }}/docs/{{ schema_file }}"
+      register: schema_file_stat
+
+    - name: Fail if schema file missing
       ansible.builtin.fail:
-        msg: "schema.sql not found at {{ app_dir }}/docs/schema.sql"
-      when: not schema_file.stat.exists
+        msg: "{{ schema_file }} not found at {{ app_dir }}/docs/{{ schema_file }}"
+      when: not schema_file_stat.stat.exists
 
     - name: Create database
       ansible.builtin.shell:
@@ -85,12 +97,13 @@
         mode: "0755"
         content: |
           #!/usr/bin/env python3
-          """Split schema.sql and run each statement individually.
+          """Split schema SQL and run each statement individually.
           ClickHouse Cloud doesn't support multi-statement queries via HTTP.
           """
           import sys
           import re
           import subprocess
+          import os
 
           def main():
               if len(sys.argv) != 3:
@@ -99,6 +112,12 @@
 
               ch_url = sys.argv[1]
               schema_file = sys.argv[2]
+
+              # Determine deployment type from schema filename
+              schema_basename = os.path.basename(schema_file)
+              is_cloud = 'cloud' in schema_basename.lower()
+              deployment_type = "cloud" if is_cloud else "self-hosted"
+              print(f"Deployment type: {deployment_type} (from {schema_basename})")
 
               # Add database parameter to URL
               if '?' in ch_url:
@@ -135,10 +154,13 @@
                   if stmt.upper().startswith('USE ') or 'CREATE DATABASE' in stmt.upper():
                       continue
 
-                  # Skip ALTER TABLE ADD PROJECTION (not supported in ClickHouse Cloud)
+                  # Skip ALTER TABLE ADD PROJECTION only for cloud deployments
                   if 'ADD PROJECTION' in stmt.upper():
-                      print(f"  Skipping projection (not supported in ClickHouse Cloud)")
-                      continue
+                      if is_cloud:
+                          print(f"  Skipping projection (not supported in ClickHouse Cloud)")
+                          continue
+                      else:
+                          print(f"  Applying projection (self-hosted mode)...")
 
                   # Show preview
                   preview = ' '.join(stmt.split())[:70]
@@ -170,7 +192,7 @@
 
     - name: Run schema script
       ansible.builtin.shell:
-        cmd: "python3 {{ app_dir }}/run_schema.py '{{ ch_url }}' '{{ app_dir }}/docs/schema.sql'"
+        cmd: "python3 {{ app_dir }}/run_schema.py '{{ ch_url }}' '{{ app_dir }}/docs/{{ schema_file }}'"
       register: schema_result
       changed_when: true
 

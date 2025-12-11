@@ -80,21 +80,22 @@ All endpoints return JSON with `Cache-Control` headers.
 
 ### 1. Set up ClickHouse
 
-Apply the schema to your ClickHouse instance:
+Apply the schema to your ClickHouse instance. Choose the appropriate schema:
+
+- `schema_cloud.sql` — For ClickHouse Cloud (SharedMergeTree, no projections)
+- `schema_self_hosted.sql` — For self-hosted ClickHouse (includes projections for better performance)
 
 ```bash
-clickhouse-client --multiquery < docs/schema.sql
-```
+# Self-hosted ClickHouse (with projections)
+clickhouse-client --multiquery < docs/schema_self_hosted.sql
 
-Or for ClickHouse Cloud:
-
-```bash
+# ClickHouse Cloud
 clickhouse-client \
   --host your-host.clickhouse.cloud \
   --secure \
   --user default \
   --password your-password \
-  --multiquery < docs/schema.sql
+  --multiquery < docs/schema_cloud.sql
 ```
 
 ### 2. Configure environment
@@ -246,9 +247,10 @@ crates/
 └── observability/# Tracing and metrics
 
 docs/
-├── plan.md       # Implementation roadmap
-├── schema.sql    # ClickHouse schema
-└── deployment.md # Production deployment guide
+├── plan.md              # Implementation roadmap
+├── schema_cloud.sql     # ClickHouse Cloud schema
+├── schema_self_hosted.sql # Self-hosted schema (with projections)
+└── deployment.md        # Production deployment guide
 
 config/
 └── prometheus.yml# Prometheus scrape config
@@ -266,7 +268,8 @@ Both are addressable/replaceable events identified by the `d` tag.
 ## Documentation
 
 - [`docs/plan.md`](docs/plan.md) — Implementation plan and architecture
-- [`docs/schema.sql`](docs/schema.sql) — ClickHouse schema with all tables and views
+- [`docs/schema_cloud.sql`](docs/schema_cloud.sql) — ClickHouse Cloud schema (SharedMergeTree)
+- [`docs/schema_self_hosted.sql`](docs/schema_self_hosted.sql) — Self-hosted schema with projections
 - [`docs/deployment.md`](docs/deployment.md) — Production deployment with Ansible
 
 ## License

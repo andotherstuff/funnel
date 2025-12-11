@@ -80,11 +80,15 @@ High-throughput Nostr analytics backend supporting a Vine-style video sharing ap
 
 ## ClickHouse Schema
 
-Full schema is in [`docs/schema.sql`](./schema.sql). Key components:
+Full schema is available in two variants:
+- [`schema_cloud.sql`](./schema_cloud.sql) — For ClickHouse Cloud
+- [`schema_self_hosted.sql`](./schema_self_hosted.sql) — For self-hosted (with projections)
+
+Key components:
 
 | Table/View | Purpose |
 |------------|---------|
-| `events_local` | Main events table with `ReplacingMergeTree` for dedup, `FixedString` for id/pubkey, ZSTD compression on content |
+| `events_local` | Main events table with `ReplacingMergeTree` for dedup, ZSTD compression on content, materialized columns for video tags |
 | `event_tags_flat` | Materialized view denormalizing tags for fast filtering by tag name/value |
 | `videos` | View filtering for kinds 34235/34236 with extracted d-tag, title, thumbnail |
 | `reaction_counts` | Materialized view aggregating kind 7 reactions per target event |
@@ -155,7 +159,7 @@ ClickHouse is expected to be external (self-hosted or ClickHouse Cloud). Configu
 **Goal:** ClickHouse ingestion + REST API for custom queries.
 
 1. ✅ Deploy ClickHouse
-2. ✅ Apply schema from `docs/schema.sql`
+2. ✅ Apply schema from `docs/schema_cloud.sql` or `docs/schema_self_hosted.sql`
 3. ✅ Implement `crates/proto`:
    - ParsedEvent type for ClickHouse insertion
    - VideoMeta extraction from video events
